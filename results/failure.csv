@@ -1,0 +1,3 @@
+scenario,label,total_time_s,goodput_mbit,retransmitted_chunks,rtt_mean_ms,rtt_jitter_ms,recovery_time_s,success,bytes_per_path,resumed_chunks,fail_time_s
+failure,no failure,6.236897945404053,67.24984177576238,0,90.46332288518897,3.428625856550805,0.0,True,"{""0"": 17301504, ""1"": 17563648, ""2"": 17563648}",0,
+failure,path 2 dies at 1.5s,8.509699821472168,49.28850709183289,1,90.7672633599941,4.392346745046481,0.1450209617614746,True,"{""0"": 24117248, ""1"": 24117248, ""2"": 4194304}",0,1.5066428184509277

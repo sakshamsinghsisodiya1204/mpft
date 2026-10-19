@@ -1,0 +1,2 @@
+scenario,label,total_time_s,goodput_mbit,retransmitted_chunks,rtt_mean_ms,rtt_jitter_ms,recovery_time_s,success,bytes_per_path,resumed_chunks
+asymmetric,80/20/5 Mbit,7.630688905715942,54.96625601992712,0,106.1685431247679,136.89034004908657,0.0,True,"{""0"": 38797312, ""1"": 10485760, ""2"": 3145728}",0

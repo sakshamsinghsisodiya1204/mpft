@@ -1,0 +1,4 @@
+scenario,label,total_time_s,goodput_mbit,retransmitted_chunks,rtt_mean_ms,rtt_jitter_ms,recovery_time_s,success,bytes_per_path,resumed_chunks
+resume,uninterrupted,9.2012197971344,45.58421701116478,0,90.57412084002863,3.079394089942726,0.0,True,"{""0"": 26214400, ""1"": 26214400}",0
+resume,killed at 40%,3.7740700244903564,,,,,,False,,0
+resume,resumed run,5.733906984329224,,,,,,True,,80
