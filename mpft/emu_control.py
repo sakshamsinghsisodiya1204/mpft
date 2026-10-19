@@ -1,4 +1,4 @@
-"""Tiny HTTP control for a running emulator (127.0.0.1 only). GET /state, POST /kill/N, POST /corrupt/RATE."""
+"""Tiny HTTP control for a running emulator (127.0.0.1 only). GET /state, POST /kill/N, /restore/N, /delay/N/MS, /corrupt/RATE."""
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -22,6 +22,10 @@ def start_control(handle, port):
             try:
                 if parts[0] == "kill":
                     handle.kill(int(parts[1]))
+                elif parts[0] == "restore":
+                    handle.restore(int(parts[1]))
+                elif parts[0] == "delay":
+                    handle.set_delay(int(parts[1]), float(parts[2]))
                 elif parts[0] == "corrupt":
                     handle.set_corrupt(float(parts[1]))
                 else:

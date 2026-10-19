@@ -32,6 +32,7 @@ class SendReq(BaseModel):
     paths: int = Field(default=4, ge=1, le=8)
     chunk_size: int = Field(default=1 << 20, ge=4096, le=16 << 20)
     profile: str = "none"
+    addr_mode: str = Field(default="auto", pattern="^(auto|tailscale|lan)$")
 
 
 def make_ui_app(node, ui_port=8000):
@@ -56,7 +57,7 @@ def make_ui_app(node, ui_port=8000):
     @app.get("/api/info")
     def info():
         return {"name": node.name, "id": node.id, "code": node.code, "code_expires": node.codes.expires_at(node.code),
-                "rendezvous": node.rendezvous, "rv_status": node.rv_status, "host": node.host,
+                "hosts": node.hosts, "rendezvous": node.rendezvous, "rv_status": node.rv_status, "host": node.host,
                 "peer_port": node.peer_port, "max_size": node.max_size, "profiles": PROFILES}
 
     @app.post("/api/code/new")
@@ -95,7 +96,7 @@ def make_ui_app(node, ui_port=8000):
             raise HTTPException(404, "Upload not found. Choose the file again.")
         if r.profile not in PROFILES:
             raise HTTPException(400, "Unknown network profile.")
-        job = SendJob(node, up["path"], r.kind, r.value, r.paths, r.chunk_size, r.profile, up["dir"]).start()
+        job = SendJob(node, up["path"], r.kind, r.value, r.paths, r.chunk_size, r.profile, up["dir"], r.addr_mode).start()
         return {"session": job.sid}
 
     @app.get("/api/session/{sid}")
@@ -103,7 +104,7 @@ def make_ui_app(node, ui_port=8000):
         """Context the live view cannot get from events: peer, capture ports, emulator paths."""
         job = node.jobs.get(sid)
         if job:
-            return {"role": "sender", "me": node.name, "peer": job.peer, "peer_name": job.peer_name, "profile": job.profile, "state": job.state,
+            return {"role": "sender", "me": node.name, "peer": job.peer, "peer_name": job.peer_name, "peer_hosts": job.peer_hosts, "profile": job.profile, "state": job.state,
                     "capture_ports": job.capture_ports(), "loopback": job.is_loopback(),
                     "net": job.emulator.state() if job.emulator else []}
         offer = next((o for o in node.offers.values() if o["session_id"] == sid), None)
@@ -112,6 +113,14 @@ def make_ui_app(node, ui_port=8000):
         port = (offer.get("reply") or {}).get("port")
         return {"role": "receiver", "me": node.name, "sender": offer["sender"], "peer": offer["client"],
                 "capture_ports": [port] if port else [], "loopback": offer["client"] in ("127.0.0.1", "::1")}
+
+    @app.get("/api/session/{sid}/events")
+    def session_events(sid: int):
+        """Merged two-sided log from disk, for replaying a past transfer."""
+        mine = "sender" if sid in node.jobs else "receiver"
+        if sid not in node.seen and not os.path.exists(node.log._path(sid)):
+            raise HTTPException(404, "Unknown session.")
+        return [{**e, "mine": e["side"] == mine} for e in node.log.events(sid)]
 
     def emulator_of(sid):
         job = node.jobs.get(sid)
@@ -125,6 +134,26 @@ def make_ui_app(node, ui_port=8000):
         if not 0 <= n < len(job.emulator.paths):
             raise HTTPException(400, "No such path.")
         job.emulator.kill(n)
+        return job.emulator.state()
+
+    @app.post("/api/session/{sid}/net/restore/{n}")
+    def net_restore(sid: int, n: int):
+        job = emulator_of(sid)
+        if not 0 <= n < len(job.emulator.paths):
+            raise HTTPException(400, "No such path.")
+        job.emulator.restore(n)
+        return job.emulator.state()
+
+    @app.post("/api/session/{sid}/net/delay/{n}")
+    def net_delay(sid: int, n: int, body: dict):
+        job = emulator_of(sid)
+        try:
+            ms = float(body.get("delay_ms"))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Delay must be a number of milliseconds.")
+        if not 0 <= n < len(job.emulator.paths) or not 0 <= ms <= 5000:
+            raise HTTPException(400, "Choose an existing path and a delay from 0 to 5000 ms.")
+        job.emulator.set_delay(n, ms)
         return job.emulator.state()
 
     @app.post("/api/session/{sid}/net/corrupt")
