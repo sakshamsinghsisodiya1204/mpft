@@ -119,11 +119,37 @@ Display filters: `mpft.type == 4` (chunks), `mpft.type == 2` (manifest), `mpft.t
 | ID shows 127.0.0.1 across Macs | No Tailscale or LAN address found; start with `--host 100.x.y.z`. |
 | Packets look like plain TCP in Wireshark | Old copy of `mpft.lua`; reload the new one. |
 
-## Shared two-sided dashboard (W7)
+## Shared two-sided dashboard
 
-- **Receiver ID** carries every address of the receiver ("h1,h2:port", base32): Tailscale 100.x and LAN when both exist. The sender probes each with `GET /health`, spreads the paths round-robin over the ones that answer, and Advanced > Receiver address can force Tailscale only or LAN only. `GET /addresses` on the peer port lists the receiver's addresses.
-- **Peer API** is exactly `GET /health`, `GET /addresses`, `POST /offer`, `POST /events/{session_id}`. The accept reply carries a one-time session token; `/events` requires it in `X-Session-Token`.
-- **Event relay**: the sender batches its events every 0.5 s to `/events/{id}`; the reply carries the receiver's new events, so both browsers show one merged log. Each event is tagged `side` (sender/receiver) with a per-side sequence `sseq`. Timestamps are shifted with the NTP-style offset measured on the offer round trip (the receiver's wait for Accept cancels out). The merged order is corrected time, then side, then `sseq`.
-- **Persistence**: `.mpft-state/<name>/sessions/<session>.jsonl` on each side; opening a past transfer from History replays it.
-- **Data ports**: `--data-port 9000` makes the receiver listen on the first free port in 9000..9099 (0 = any free port).
-- **Emulator live actions** (Network panel): kill path, restore path, set delay per path, set corruption percent.
+- **Receiver ID** carries every address of the receiver ("h1,h2:port", base32): Tailscale 100.x and LAN when both exist. The sender probes each with `GET /health`, spreads the paths round-robin over those that answer (real multipath over two networks), and Advanced > Receiver address can force Tailscale only or LAN only. Send > Test connection shows per address reachable/unreachable with the reason.
+- **Peer API** is exactly `GET /health`, `GET /addresses`, `POST /offer`, `POST /events/{session_id}`. The accept reply carries a session token; `/events` needs it in `X-Session-Token`.
+- **Event forwarding**: the sender batches its events every 0.5 s to `/events/{id}`; the reply carries the receiver's new events, so both browsers show one merged log. Each event is tagged `side` and a per-side sequence `sseq`. Timestamps are shifted with an NTP-style offset measured on the offer round trip (the receiver's wait for Accept cancels out). Order: corrected time, then side, then `sseq`. `t` is epoch seconds (offset-corrected); the UI shows time since session start.
+- **Events**: `session_started`, `offer_sent/received/accepted/declined`, `manifest_sent/received`, `path_up/down/restored`, `backoff`, `timeout`, `chunk_state` (pending, inflight, done, retransmitted, failed; offset, size, path, attempt), `message` (HELLO, MANIFEST, NACK, ERROR, DONE always; CHUNK/ACK sampled), `nack`, `requeue` (count, reason), `hash_chunk_ok/bad`, `hash_file_verified/mismatch`, `throughput_tick`, `rtt_sample`, `session_done`. `status/<role>-<session>.json` is unchanged.
+- **Persistence**: `.mpft-state/<name>/sessions/<session>.jsonl` on each side. History > Replay re-runs a session through the same reducer (play, pause, 1x/4x/16x, scrub); History > JSON exports it.
+- **Data ports**: `--data-port 9000` makes the receiver listen on the first free port in 9000..9099 (0 = any free port); use it for fixed firewall rules.
+- **Resume**: received data is staged by file hash. If the receiver or network goes away the sender fails with a clear message and the `.part` file is kept; sending the same file again resumes from the chunks already held.
+- **Transfer page**: session header, progress, canvas chunk map (hatched in flight, solid done, outlined retransmitted, crossed failed, path-colour tick), sortable chunk table, paths table, incidents table with a plain sentence per failure, six graphs on a shared time axis with incident markers, verification, network controls (Kill, Restore, set delay, set corruption), protocol trace, event log with side filter, Wireshark commands.
+
+## Two-Mac runbook (Tailscale)
+
+1. Both people install Tailscale and join the same tailnet (`tailscale ip -4` shows the 100.x address). Tailscale is what encrypts the traffic; MPFT does not.
+2. Both run `python -m mpft web --name NAME --ui-port 8000 --peer-port 8001 --data-port 9000 --out ./downloads` and open `http://127.0.0.1:8000`.
+3. Receiver: Receive page, press Copy ID and message it to the sender. Optionally also send the 6-character code (valid 10 minutes, once).
+4. Sender: Send page, pick a file, paste the ID (and code), Test connection, Send.
+5. Without a code, the receiver presses Accept. Both open the Transfer page and see the same dashboard.
+6. macOS asks "accept incoming connections" the first time: Allow. If it was denied: System Settings > Network > Firewall > Options and allow the project's `.venv` Python.
+7. No Tailscale, different WiFi: use a phone hotspot that both Macs join (client isolation on guest or campus WiFi blocks Mac-to-Mac traffic; hotspots usually allow it).
+
+## Troubleshooting (addition)
+
+| Symptom | Cause and fix |
+|---|---|
+| Test connection: "No answer (timeout)" | Other network, Mac asleep, firewall dropping packets, or WiFi client isolation. Use Tailscale or a hotspot. |
+| "Connection refused" | Address reachable, app not listening: check the ID and that the receiver app runs on that peer port. |
+| "No route to host" | Different networks without Tailscale. |
+| Transfer failed, "send the same file again" | Receiver or network dropped; resend the same file and it resumes. |
+| Settings > self-test says unreachable for a LAN address | macOS firewall blocks Python; allow it. |
+
+## Honest security notes
+
+No built-in encryption or authentication: chunks, events and offers are plain TCP and HTTP. Tailscale (WireGuard) encrypts between the Macs. Protections in the app: the UI server listens on 127.0.0.1 only and checks Host/Origin; the peer server exposes only four endpoints; `/events` needs a per-session token; codes are single-use, expire after 10 minutes and are rate-limited; names are sanitised, files never overwritten, 2 GB default limit; the receiver must press Accept unless a valid code was given.
