@@ -43,7 +43,7 @@ def cmd_receive(a):
 
 def cmd_emulate(a):
     from .emulator import run_emulator
-    run_emulator(a.config)
+    run_emulator(a.config, a.control_port)
 
 
 def cmd_dashboard(a):
@@ -70,6 +70,7 @@ def main(argv=None):
     r.set_defaults(fn=cmd_receive)
     e = sub.add_parser("emulate")
     e.add_argument("--config", required=True)
+    e.add_argument("--control-port", type=int, help="HTTP control on 127.0.0.1: GET /state, POST /kill/N, POST /corrupt/RATE")
     e.set_defaults(fn=cmd_emulate)
     d = sub.add_parser("dashboard")
     d.add_argument("--host", default="127.0.0.1")

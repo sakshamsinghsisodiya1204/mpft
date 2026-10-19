@@ -11,6 +11,7 @@ import time
 from .protocol import (ACK, CHUNK, DONE, ERROR, HELLO, MANIFEST, MANIFEST_ACK, NACK, ProtocolError,
                        build_manifest, chunk_len, parse_addr, recv_msg, send_json, send_msg, tune)
 from .metrics import build_result
+from . import events as ev
 from .status import StatusWriter
 
 log = logging.getLogger("mpft.sender")
@@ -19,11 +20,11 @@ MAX_PATH_FAILS = 6
 
 
 class Sender:
-    def __init__(self, file_path, targets, chunk_size, corrupt_rate, bind=None, chunk_timeout=5.0):
+    def __init__(self, file_path, targets, chunk_size, corrupt_rate, bind=None, chunk_timeout=5.0, session_id=None):
         self.path, self.targets, self.corrupt_rate = file_path, targets, corrupt_rate
         self.bind, self.timeout = bind, chunk_timeout
         self.m = build_manifest(file_path, chunk_size)
-        self.cs, self.sid = chunk_size, random.getrandbits(32)
+        self.cs, self.sid = chunk_size, session_id if session_id is not None else random.getrandbits(32)
         self.fd = os.open(file_path, os.O_RDONLY)
         self.q = queue.PriorityQueue()  # (0, idx) retries jump ahead of fresh (1, idx) work
         self.lock, self.manifest_lock = threading.Lock(), threading.Lock()
@@ -46,6 +47,9 @@ class Sender:
                                              source_address=(self.bind, 0) if self.bind else None)
                 tune(s).settimeout(self.timeout)
                 send_msg(s, HELLO, self.sid)
+                ev.emit("path_up", role="sender", session=self.sid, path=pid,
+                        local="%s:%d" % s.getsockname()[:2], remote=self.targets[pid])
+                ev.message("sender", self.sid, HELLO, 0, 0, pid, "out")
                 return s
             except OSError:
                 time.sleep(0.2 * 2 ** attempt)
@@ -57,10 +61,13 @@ class Sender:
             if self.ready.is_set():
                 return
             send_json(sock, MANIFEST, self.sid, self.m)
+            ev.emit("manifest_sent", role="sender", session=self.sid, total_chunks=self.m["total_chunks"])
+            ev.message("sender", self.sid, MANIFEST, 0, 0, None, "out")
             mtype, _, _, payload = recv_msg(sock)
             if mtype != MANIFEST_ACK:
                 raise ProtocolError("expected MANIFEST_ACK")
             held = set(json.loads(payload))
+            ev.message("sender", self.sid, MANIFEST_ACK, 0, 0, None, "in")
             self.resumed = len(held)
             todo = [i for i in range(self.m["total_chunks"]) if i not in held]
             self.to_send = len(todo)
@@ -103,6 +110,7 @@ class Sender:
             self.socks[pid] = sock
         else:
             self.path_state[pid] = "down"
+            ev.emit("path_down", role="sender", session=self.sid, path=pid)
             if sock is None and not self.stop.is_set():
                 log.warning("path %d is down", pid)
 
@@ -114,15 +122,20 @@ class Sender:
             flipped[random.randrange(len(flipped))] ^= 0x01
             data = bytes(flipped)
         start = time.perf_counter()
+        ev.emit("chunk_state", role="sender", session=self.sid, index=idx, state="inflight", path=pid,
+                attempt=self.attempts.get(idx, 0) + 1)
+        ev.message("sender", self.sid, CHUNK, idx, len(data), pid, "out")
         try:
             send_msg(sock, CHUNK, self.sid, idx, data)
             mtype, _, ridx, _ = recv_msg(sock)
         except (OSError, ProtocolError):  # timeout, reset or garbage: treat the path as failed
             return False
+        ev.message("sender", self.sid, mtype, ridx, 0, pid, "in")
         if mtype == ACK and ridx == idx:
             self.on_ack(pid, idx, len(data), (time.perf_counter() - start) * 1000)
         elif mtype == NACK:
-            self.requeue(idx)
+            ev.emit("nack", role="sender", session=self.sid, index=idx, path=pid)
+            self.requeue(idx, pid)
         else:
             return False
         return True
@@ -131,6 +144,8 @@ class Sender:
         with self.lock:
             now = time.time() - self.t0
             self.acked.add(idx)
+            ev.emit("chunk_state", role="sender", session=self.sid, index=idx, state="done", path=pid,
+                    bytes=nbytes, rtt_ms=round(rtt_ms, 2))
             self.path_bytes[pid] += nbytes
             self.rtts.append(rtt_ms)
             self.events.append((round(now, 4), pid, nbytes))
@@ -147,9 +162,9 @@ class Sender:
                 self.t_fail = time.time() - self.t0
             self.fail_pending.add(idx)
         log.warning("path %d failed with chunk %d in flight; requeueing", pid, idx)
-        self.requeue(idx)
+        self.requeue(idx, pid)
 
-    def requeue(self, idx):
+    def requeue(self, idx, pid=None):
         """NACK, timeout or dead socket: retry up to MAX_RETRIES with exponential backoff."""
         with self.lock:
             self.retransmits += 1
@@ -158,6 +173,8 @@ class Sender:
             self.error = f"chunk {idx} failed {MAX_RETRIES} retries"
             self.stop.set()
             return
+        ev.emit("requeue", role="sender", session=self.sid, index=idx, path=pid, attempt=n)
+        ev.emit("chunk_state", role="sender", session=self.sid, index=idx, state="retransmitted", path=pid, attempt=n)
         timer = threading.Timer(min(0.05 * 2 ** (n - 1), 1.0), self.q.put, ((0, idx),))
         timer.daemon = True
         timer.start()
@@ -170,7 +187,9 @@ class Sender:
             try:
                 s.settimeout(60)
                 send_msg(s, DONE, self.sid)
+                ev.message("sender", self.sid, DONE, 0, 0, None, "out")
                 mtype, _, _, payload = recv_msg(s)
+                ev.message("sender", self.sid, mtype, 0, len(payload), None, "in")
                 if mtype == DONE:
                     return True
                 self.error = payload.decode(errors="replace") or "receiver reported ERROR"
@@ -192,12 +211,22 @@ class Sender:
     def run(self):
         self.done = False
         self.t0 = time.time()
+        ev.emit("session_started", role="sender", session=self.sid, file_name=self.m["name"],
+                file_size=self.m["size"], file_sha256=self.m["file_sha256"], chunk_size=self.cs,
+                total_chunks=self.m["total_chunks"], paths=len(self.targets))
         writer = StatusWriter("sender", self.sid, self.snapshot).start()
         threads = [threading.Thread(target=self.worker, args=(i,), daemon=True) for i in range(len(self.targets))]
         for t in threads:
             t.start()
+        last_tick, last_bytes = time.time(), dict(self.path_bytes)
         while not self.stop.is_set() and any(t.is_alive() for t in threads):
             time.sleep(0.02)
+            if time.time() - last_tick >= 1.0:  # per-path throughput once a second
+                dt, last_tick = time.time() - last_tick, time.time()
+                for p, b in dict(self.path_bytes).items():
+                    ev.emit("throughput_tick", role="sender", session=self.sid, path=p,
+                            mbit=round((b - last_bytes[p]) * 8 / 1e6 / dt, 3), bytes=b)
+                    last_bytes[p] = b
         self.stop.set()
         for t in threads:
             t.join()
@@ -205,11 +234,13 @@ class Sender:
         elapsed = time.time() - self.t0
         self.done = ok
         writer.stop()
+        ev.emit("session_done", role="sender", session=self.sid, success=ok, error=self.error, elapsed_s=round(elapsed, 3))
         for s in self.socks.values():
             s.close()
         os.close(self.fd)
         return build_result(self, elapsed, ok)
 
 
-def run_transfer(file_path, targets, chunk_size=1048576, corrupt_rate=0.0, bind=None, chunk_timeout=5.0):
-    return Sender(file_path, targets, chunk_size, corrupt_rate, bind, chunk_timeout).run()
+def run_transfer(file_path, targets, chunk_size=1048576, corrupt_rate=0.0, bind=None, chunk_timeout=5.0,
+                 session_id=None):
+    return Sender(file_path, targets, chunk_size, corrupt_rate, bind, chunk_timeout, session_id).run()
