@@ -31,6 +31,7 @@ class SendJob:
         self.sid = random.getrandbits(32)
         self.state, self.message, self.emulator, self.result = "starting", "", None, None
         node.jobs[self.sid] = self
+        node.seen.add(self.sid)
 
     def set_state(self, state, message=""):
         self.state, self.message = state, message

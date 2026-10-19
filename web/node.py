@@ -37,7 +37,7 @@ class Node:
         self.code = None
         self.lock = threading.Lock()
         self.offers, self.sessions, self.jobs = {}, {}, {}  # offer_id / session id -> state
-        self.received = []
+        self.received, self.seen = [], set()  # seen: every session id this node took part in
         self.history = self._load_history()
         ev.subscribe(self._on_event)
         self.new_code()
@@ -126,6 +126,7 @@ class Node:
         stage = os.path.join(self.out_dir, ".incoming", offer["id"])
         handle = start_receiver("0.0.0.0:0", stage)
         with self.lock:
+            self.seen.add(offer["session_id"])
             self.sessions[offer["session_id"]] = {"offer": offer, "handle": handle, "stage": stage}
         threading.Timer(3600, self._cleanup, (offer["session_id"],)).start()
         offer["reply"] = {"status": "accepted", "port": handle.port}
