@@ -13,6 +13,8 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from mpft.emulator import BLOCK
+
 from .feed import Feed
 from .netprofiles import PROFILES
 from .node import safe_name
@@ -110,6 +112,34 @@ def make_ui_app(node, ui_port=8000):
         port = (offer.get("reply") or {}).get("port")
         return {"role": "receiver", "me": node.name, "sender": offer["sender"], "peer": offer["client"],
                 "capture_ports": [port] if port else [], "loopback": offer["client"] in ("127.0.0.1", "::1")}
+
+    def emulator_of(sid):
+        job = node.jobs.get(sid)
+        if not job or not job.emulator:
+            raise HTTPException(404, "This transfer has no emulated network. Choose a network condition when sending.")
+        return job
+
+    @app.post("/api/session/{sid}/net/kill/{n}")
+    def net_kill(sid: int, n: int):
+        job = emulator_of(sid)
+        if not 0 <= n < len(job.emulator.paths):
+            raise HTTPException(400, "No such path.")
+        job.emulator.kill(n)
+        return job.emulator.state()
+
+    @app.post("/api/session/{sid}/net/corrupt")
+    def net_corrupt(sid: int, body: dict):
+        """body.percent = share of chunks to damage; the emulator works per 16 KiB block, so convert."""
+        job = emulator_of(sid)
+        try:
+            pct = float(body.get("percent", 0))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Corruption must be a number from 0 to 100.")
+        if not 0 <= pct <= 100:
+            raise HTTPException(400, "Corruption must be a number from 0 to 100.")
+        blocks = max(1, job.chunk_size // BLOCK)
+        job.emulator.set_corrupt(1 - (1 - pct / 100) ** (1 / blocks))
+        return {"percent": pct}
 
     @app.get("/api/offers")
     def offers():

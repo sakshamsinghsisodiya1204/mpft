@@ -113,8 +113,20 @@ MP.panels.wireshark = () => {
     const cmd = "sudo tcpdump -i " + (m.loopback ? "lo0" : "any") + " -w mpft-" + s.sid + ".pcap '" + cap + "'";
     body.replaceChildren(H("p", {}, "Start this before the transfer for a full capture:"), H("pre", {}, cmd),
       H("p", {}, "Display filter for this transfer: ", H("code", {}, ports.map((p) => "tcp.port == " + p).join(" || ")), ". Chunks only: ", H("code", {}, "mpft.type == 4"), "."),
-      H("p", { class: "muted" }, "Load wireshark/mpft.lua first (Wireshark > Help > About > Folders > Personal Lua Plugins). Ports are chosen per transfer; if packets show as plain TCP, use Analyze > Decode As and map these ports to MPFT."));
+      H("p", { class: "muted" }, "Load the current wireshark/mpft.lua first (Wireshark > Help > About > Folders > Personal Lua Plugins, then Analyze > Reload Lua Plugins). Ports are chosen per transfer; the dissector recognises MPFT by its header on any port."));
   } };
 };
 
-MP.panels.network = () => ({ el: H("div"), update() {} });
+MP.panels.network = () => {
+  const body = H("div"), msg = H("p", { class: "err", role: "alert" }), pct = H("input", { type: "number", id: "corrupt", min: 0, max: 100, step: 1, value: 0, style: "width:6em" });
+  const call = (url, data) => MP.post(url, data).then(() => (msg.textContent = "")).catch((e) => (msg.textContent = e.message));
+  const el = H("section", { class: "panel", hidden: true }, H("h2", {}, "Network conditions"), body,
+    H("div", { class: "row" }, H("label", { for: "corrupt", style: "margin:0" }, "Corrupt % of chunks"), pct,
+      H("button", { type: "button", id: "set-corrupt", onclick: () => call("/api/session/" + el.dataset.sid + "/net/corrupt", { percent: +pct.value }) }, "Set corruption")), msg,
+    H("p", { class: "muted" }, "Emulator proxies sit between sender and receiver. Corruption is applied to bytes in flight; the receiver's chunk hash catches it and the sender retransmits."));
+  return { el, update(s, m) {
+    el.hidden = !(m.net && m.net.length); if (el.hidden) return; el.dataset.sid = s.sid;
+    body.replaceChildren(MP.table(["Path", "Listen port", "Delay ms", "Jitter ms", "Rate Mbit/s", "State", ""], m.net.map((p) => [p.path, p.listen_port, p.delay_ms || 0, p.jitter_ms || 0, p.rate_mbit || "unlimited",
+      p.dead ? "killed" : "up", H("button", { type: "button", class: "kill", disabled: p.dead || s.ended, onclick: () => call("/api/session/" + s.sid + "/net/kill/" + p.path) }, "Kill path " + p.path)]), [0, 1, 2, 3, 4]));
+  } };
+};
