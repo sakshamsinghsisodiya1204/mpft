@@ -4,11 +4,11 @@ from mpft.emulator import BLOCK, start_emulator
 PROFILES = ("none", "asymmetric", "lossy", "path_failure")
 
 
-def path_configs(profile, host, port, n, chunk_size):
+def path_configs(profile, hosts, port, n, chunk_size):
     """Per-path emulator configs (listen_port 0 = pick a free port)."""
     cfgs = []
     for i in range(n):
-        c = {"listen_port": 0, "to": f"{host}:{port}", "delay_ms": 0, "jitter_ms": 0, "rate_mbit": 0}
+        c = {"listen_port": 0, "to": f"{hosts[i % len(hosts)]}:{port}", "delay_ms": 0, "jitter_ms": 0, "rate_mbit": 0}
         if profile == "asymmetric":  # paths get progressively slower and further away
             c.update(delay_ms=5 + 20 * i, jitter_ms=2 * i, rate_mbit=max(40 // (i + 1), 2))
         elif profile == "lossy":
@@ -22,13 +22,13 @@ def path_configs(profile, host, port, n, chunk_size):
     return cfgs
 
 
-def start_profile(profile, host, port, n, chunk_size):
-    """Return (targets, emulator handle or None)."""
+def start_profile(profile, hosts, port, n, chunk_size):
+    """hosts: receiver addresses; paths alternate over them. Return (targets, emulator handle or None)."""
     if profile in (None, "", "none"):
-        return [f"{host}:{port}"] * n, None
+        return [f"{hosts[i % len(hosts)]}:{port}" for i in range(n)], None
     if profile not in PROFILES:
         raise ValueError(f"Unknown network profile '{profile}'.")
-    emu = start_emulator(path_configs(profile, host, port, n, chunk_size))
+    emu = start_emulator(path_configs(profile, hosts, port, n, chunk_size))
     for p in emu.paths:  # report the port the OS picked
         p.cfg["listen_port"] = p.srv.getsockname()[1]
     return [f"127.0.0.1:{p.cfg['listen_port']}" for p in emu.paths], emu

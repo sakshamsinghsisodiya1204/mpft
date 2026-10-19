@@ -98,10 +98,10 @@ MP.panels.logs = () => {
   return { el: H("div", {}, panel("Event log", log), panel("Protocol messages (last 50, CHUNK and ACK sampled)", trace)), update(s) {
     if (n > s.log.length) { log.replaceChildren(); n = 0; }
     const stick = log.scrollTop + log.clientHeight >= log.scrollHeight - 8;
-    for (; n < s.log.length; n++) log.append(H("div", {}, MP.clock(s.log[n].t) + "  " + s.log[n].text));
+    for (; n < s.log.length; n++) log.append(H("div", {}, MP.clock(s.log[n].t) + (s.log[n].side ? "  [" + s.log[n].side + "]  " : "  ") + s.log[n].text));
     if (stick) log.scrollTop = log.scrollHeight;
-    trace.replaceChildren(MP.table(["Time", "Dir", "Type", "Chunk", "Bytes", "Path"], s.trace.slice().reverse().map((m) =>
-      [MP.clock(m.t), m.direction === "out" ? "send" : "recv", m.type, ["CHUNK", "ACK", "NACK"].includes(m.type) ? m.index : "-", m.length, m.path ?? "-"]), [3, 4, 5]));
+    trace.replaceChildren(MP.table(["Time", "Side", "Dir", "Type", "Chunk", "Bytes", "Path"], s.trace.slice().reverse().map((m) =>
+      [MP.clock(m.t), m.side || m.role, m.direction === "out" ? "send" : "recv", m.type, ["CHUNK", "ACK", "NACK"].includes(m.type) ? m.index : "-", m.length, m.path ?? "-"]), [4, 5, 6]));
   } };
 };
 
@@ -128,7 +128,11 @@ MP.panels.network = () => {
   return { el, update(s, m) {
     el.hidden = !(m.net && m.net.length); if (el.hidden) return; el.dataset.sid = s.sid;
     const sig = JSON.stringify([m.net, s.ended]); if (sig === last) return; last = sig; // rebuilding buttons on every redraw would eat clicks
-    body.replaceChildren(MP.table(["Path", "Listen port", "Delay ms", "Jitter ms", "Rate Mbit/s", "State", ""], m.net.map((p) => [p.path, p.listen_port, p.delay_ms || 0, p.jitter_ms || 0, p.rate_mbit || "unlimited",
-      p.dead ? "killed" : "up", H("button", { type: "button", class: "kill", disabled: p.dead || s.ended, onclick: () => call("/api/session/" + s.sid + "/net/kill/" + p.path) }, "Kill path " + p.path)]), [0, 1, 2, 3, 4]));
+    body.replaceChildren(MP.table(["Path", "Listen port", "Delay ms", "Jitter ms", "Rate Mbit/s", "State", "Live actions (set delay in ms)"], m.net.map((p) => [p.path, p.listen_port, p.delay_ms || 0, p.jitter_ms || 0, p.rate_mbit || "unlimited",
+      p.dead ? "killed" : "up", H("span", { class: "row" },
+        H("button", { type: "button", class: "kill", disabled: p.dead || s.ended, onclick: () => call("/api/session/" + s.sid + "/net/kill/" + p.path) }, "Kill path " + p.path),
+        H("button", { type: "button", class: "restore", disabled: !p.dead || s.ended, onclick: () => call("/api/session/" + s.sid + "/net/restore/" + p.path) }, "Restore"),
+        H("input", { type: "number", min: 0, max: 5000, step: 10, value: p.delay_ms || 0, style: "width:5em", "aria-label": "Delay ms for path " + p.path, disabled: p.dead || s.ended,
+          onchange: (ev) => call("/api/session/" + s.sid + "/net/delay/" + p.path, { delay_ms: +ev.target.value }) }))]), [0, 1, 2, 3, 4]));
   } };
 };

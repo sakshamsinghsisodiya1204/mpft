@@ -18,18 +18,30 @@ class PathProxy:
     def __init__(self, cfg):
         self.cfg = cfg
         self.target = parse_addr(cfg["to"])
-        self.srv = socket.socket()
-        self.srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.srv.bind((cfg.get("listen_host", "127.0.0.1"), cfg["listen_port"]))
-        self.srv.listen(32)
         self.conns, self.lock, self.dead = [], threading.Lock(), False
         self.timer = None
-        threading.Thread(target=self._accept_loop, daemon=True).start()
+        self._listen()
 
-    def _accept_loop(self):
+    def _listen(self):
+        self.srv = socket.socket()
+        self.srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.srv.bind((self.cfg.get("listen_host", "127.0.0.1"), self.cfg["listen_port"]))
+        self.srv.listen(32)
+        threading.Thread(target=self._accept_loop, args=(self.srv,), daemon=True).start()
+
+    def restore(self):
+        """Bring a killed path back on the same port (the sender's path loop reconnects by itself)."""
+        if not self.dead:
+            return
+        self.cfg.pop("drop_after_s", None)  # do not schedule another death
+        self.timer, self.dead = None, False
+        self._listen()
+        ev.emit("emulator_path_restored", port=self.cfg["listen_port"])
+
+    def _accept_loop(self, srv):
         while True:
             try:
-                client, _ = self.srv.accept()
+                client, _ = srv.accept()
             except OSError:
                 return
             if self.cfg.get("drop_after_s") and self.timer is None:
@@ -110,6 +122,12 @@ class EmulatorHandle:
 
     def kill(self, i):
         self.paths[i].kill()
+
+    def restore(self, i):
+        self.paths[i].restore()
+
+    def set_delay(self, i, delay_ms):
+        self.paths[i].cfg["delay_ms"] = max(0.0, float(delay_ms))  # read per block, applies immediately
 
     def set_corrupt(self, rate):
         for p in self.paths:

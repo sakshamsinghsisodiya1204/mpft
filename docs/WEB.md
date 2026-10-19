@@ -118,3 +118,12 @@ Display filters: `mpft.type == 4` (chunks), `mpft.type == 2` (manifest), `mpft.t
 | Port already in use | A previous instance is still running: `lsof -i :8001`. |
 | ID shows 127.0.0.1 across Macs | No Tailscale or LAN address found; start with `--host 100.x.y.z`. |
 | Packets look like plain TCP in Wireshark | Old copy of `mpft.lua`; reload the new one. |
+
+## Shared two-sided dashboard (W7)
+
+- **Receiver ID** carries every address of the receiver ("h1,h2:port", base32): Tailscale 100.x and LAN when both exist. The sender probes each with `GET /health`, spreads the paths round-robin over the ones that answer, and Advanced > Receiver address can force Tailscale only or LAN only. `GET /addresses` on the peer port lists the receiver's addresses.
+- **Peer API** is exactly `GET /health`, `GET /addresses`, `POST /offer`, `POST /events/{session_id}`. The accept reply carries a one-time session token; `/events` requires it in `X-Session-Token`.
+- **Event relay**: the sender batches its events every 0.5 s to `/events/{id}`; the reply carries the receiver's new events, so both browsers show one merged log. Each event is tagged `side` (sender/receiver) with a per-side sequence `sseq`. Timestamps are shifted with the NTP-style offset measured on the offer round trip (the receiver's wait for Accept cancels out). The merged order is corrected time, then side, then `sseq`.
+- **Persistence**: `.mpft-state/<name>/sessions/<session>.jsonl` on each side; opening a past transfer from History replays it.
+- **Data ports**: `--data-port 9000` makes the receiver listen on the first free port in 9000..9099 (0 = any free port).
+- **Emulator live actions** (Network panel): kill path, restore path, set delay per path, set corruption percent.

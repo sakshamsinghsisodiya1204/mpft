@@ -12,7 +12,7 @@ MP.views.receive = function (root) {
     info = i;
     idBox.textContent = i.id;
     codeBox.textContent = i.code;
-    status.textContent = "Listening on port " + i.peer_port + " as " + i.name + ". Max file size " + MP.bytes(i.max_size) + ".";
+    status.textContent = "Listening on port " + i.peer_port + " as " + i.name + " (" + (i.hosts || [i.host]).join(" + ") + "). Max file size " + MP.bytes(i.max_size) + ".";
     rvInput.value = i.rendezvous || "";
     rvMsg.textContent = "Rendezvous: " + i.rv_status;
   };
