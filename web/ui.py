@@ -96,6 +96,21 @@ def make_ui_app(node, ui_port=8000):
         job = SendJob(node, up["path"], r.kind, r.value, r.paths, r.chunk_size, r.profile, up["dir"]).start()
         return {"session": job.sid}
 
+    @app.get("/api/session/{sid}")
+    def session(sid: int):
+        """Context the live view cannot get from events: peer, capture ports, emulator paths."""
+        job = node.jobs.get(sid)
+        if job:
+            return {"role": "sender", "me": node.name, "peer": job.peer, "profile": job.profile, "state": job.state,
+                    "capture_ports": job.capture_ports(), "loopback": job.is_loopback(),
+                    "net": job.emulator.state() if job.emulator else []}
+        offer = next((o for o in node.offers.values() if o["session_id"] == sid), None)
+        if offer is None:
+            raise HTTPException(404, "Unknown session.")
+        port = (offer.get("reply") or {}).get("port")
+        return {"role": "receiver", "me": node.name, "sender": offer["sender"], "peer": offer["client"],
+                "capture_ports": [port] if port else [], "loopback": offer["client"] in ("127.0.0.1", "::1")}
+
     @app.get("/api/offers")
     def offers():
         return [node.public_offer(o) for o in node.offers.values() if o["state"] == "pending"]

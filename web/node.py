@@ -128,7 +128,9 @@ class Node:
         with self.lock:
             self.seen.add(offer["session_id"])
             self.sessions[offer["session_id"]] = {"offer": offer, "handle": handle, "stage": stage}
-        threading.Timer(3600, self._cleanup, (offer["session_id"],)).start()
+        t = threading.Timer(3600, self._cleanup, (offer["session_id"],))
+        t.daemon = True
+        t.start()
         offer["reply"] = {"status": "accepted", "port": handle.port}
         self._resolve(offer, "accepted")
         return offer["reply"]

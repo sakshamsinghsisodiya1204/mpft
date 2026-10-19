@@ -125,7 +125,8 @@ class ReceiverHandle:
             with self.lock:
                 path_id = self.next_path[sid] = self.next_path.get(sid, -1) + 1
             log.info("session %d: path %d connected", sid, path_id)
-            ev.emit("path_up", role="receiver", session=sid, path=path_id, remote="%s:%d" % conn.getpeername()[:2])
+            ev.emit("path_up", role="receiver", session=sid, path=path_id, remote="%s:%d" % conn.getpeername()[:2],
+                    local="%s:%d" % conn.getsockname()[:2])
             ev.message("receiver", sid, HELLO, 0, 0, path_id, "in")
             while True:
                 mtype, sid, idx, payload = recv_msg(conn)

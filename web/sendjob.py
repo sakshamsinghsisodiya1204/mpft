@@ -30,12 +30,20 @@ class SendJob:
         self.paths, self.chunk_size, self.profile, self.cleanup_dir = paths, chunk_size, profile, cleanup_dir
         self.sid = random.getrandbits(32)
         self.state, self.message, self.emulator, self.result = "starting", "", None, None
+        self.peer, self.targets = None, []
         node.jobs[self.sid] = self
         node.seen.add(self.sid)
 
     def set_state(self, state, message=""):
         self.state, self.message = state, message
         ev.emit("send_state", node=self.node.name, session=self.sid, state=state, message=message)
+
+    def capture_ports(self):
+        """Ports the sender connects to: the receiver's transfer port, or the emulator proxies in front of it."""
+        return sorted({int(t.rsplit(":", 1)[1]) for t in self.targets})
+
+    def is_loopback(self):
+        return all(t.startswith("127.") for t in self.targets)
 
     def start(self):
         threading.Thread(target=self.run, daemon=True).start()
@@ -59,6 +67,7 @@ class SendJob:
             self.set_state("resolving", "Looking up receiver")
             rid, code = self.resolve()
             host, port = decode_id(rid)
+            self.peer = f"{host}:{port}"
             self.set_state("hashing", "Computing SHA-256")
             offer = {"sender": self.node.name, "file_name": safe_name(os.path.basename(self.path)), "size": size,
                      "sha256": file_sha256(self.path), "session_id": self.sid, "paths": self.paths,
@@ -68,7 +77,8 @@ class SendJob:
             if r.get("status") != "accepted":
                 raise RuntimeError(r.get("reason") or r.get("detail") or "Receiver did not accept.")
             targets, self.emulator = start_profile(self.profile, host, r["port"], self.paths, self.chunk_size)
-            self.set_state("transferring", " ".join(targets))
+            self.targets = targets
+            self.set_state("transferring", f"{self.paths} path(s)")
             res = run_transfer(self.path, targets, self.chunk_size, session_id=self.sid)
             ok, err = res["success"], res.get("error")
         except httpx.HTTPError as e:
