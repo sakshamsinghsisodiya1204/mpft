@@ -27,7 +27,7 @@ MP.reduce = function (s, e) {
     case "manifest_sent": say("manifest sent"); break;
     case "manifest_received": say("manifest received" + (e.held ? ", " + e.held + " chunks already held" : "")); break;
     case "path_up": { const p = MP.pathOf(s, e.path); p.state = "up"; p.local = e.local || p.local; p.remote = e.remote || p.remote; say("path " + e.path + " up"); break; }
-    case "path_down": if (!s.ended && e.path != null) { const p = MP.pathOf(s, e.path); p.state = "down"; say("path " + e.path + " down" + (p.retries ? ", " + p.retries + " chunk retries" : "")); } break;
+    case "path_down": if (!s.ended && e.path != null && MP.pathOf(s, e.path).state !== "down") { const p = MP.pathOf(s, e.path); p.state = "down"; say("path " + e.path + " down" + (p.retries ? ", " + p.retries + " chunk retries" : "")); } break;
     case "chunk_state":
       if (e.state === "inflight") { if (s.cell[e.index] !== 2) { s.cell[e.index] = 1; s.cpath[e.index] = e.path; } s.attempts[e.index] = e.attempt; mark(e.index); }
       else if (e.state === "done") { chunkDone(e.index, e.path, e.bytes); const p = MP.pathOf(s, e.path); p.n++; const d = e.rtt_ms - p.mean; p.mean += d / p.n; p.m2 += d * (e.rtt_ms - p.mean); s.verify.ok = s.done; }

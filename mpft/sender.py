@@ -103,6 +103,7 @@ class Sender:
                 fails = 0
             else:
                 fails += 1
+                ev.emit("path_down", role="sender", session=self.sid, path=pid, reason="send failed")
                 self.fail_path(pid, idx)
                 sock.close()
                 sock = None

@@ -13,7 +13,7 @@ MP.panels.header = (s0) => {
     f.File.textContent = s.name || "-"; f.Size.textContent = s.size != null ? MP.bytes(s.size) + " (" + s.size + " B)" : "-";
     f["SHA-256"].textContent = s.sha || "-"; f.Session.textContent = s.sid + " (0x" + hex8(s.sid) + ")";
     const peer = m.peer || "?";
-    f.Direction.textContent = m.role === "receiver" ? (m.sender || "sender") + " -> " + (m.me || "me") : (m.me || "me") + " -> " + peer;
+    f.Direction.textContent = m.role === "receiver" ? (m.sender || "sender") + " -> " + (m.me || "me") : (m.me || "me") + " -> " + (m.peer_name ? m.peer_name + " (" + peer + ")" : peer);
     f.State.textContent = s.phase + (s.message && !s.ended ? " (" + s.message + ")" : "") + (s.ended && s.message ? ": " + s.message : "");
     f.State.className = s.phase === "failed" ? "err" : "";
   } };
@@ -120,12 +120,14 @@ MP.panels.wireshark = () => {
 MP.panels.network = () => {
   const body = H("div"), msg = H("p", { class: "err", role: "alert" }), pct = H("input", { type: "number", id: "corrupt", min: 0, max: 100, step: 1, value: 0, style: "width:6em" });
   const call = (url, data) => MP.post(url, data).then(() => (msg.textContent = "")).catch((e) => (msg.textContent = e.message));
+  let last = "";
   const el = H("section", { class: "panel", hidden: true }, H("h2", {}, "Network conditions"), body,
     H("div", { class: "row" }, H("label", { for: "corrupt", style: "margin:0" }, "Corrupt % of chunks"), pct,
       H("button", { type: "button", id: "set-corrupt", onclick: () => call("/api/session/" + el.dataset.sid + "/net/corrupt", { percent: +pct.value }) }, "Set corruption")), msg,
     H("p", { class: "muted" }, "Emulator proxies sit between sender and receiver. Corruption is applied to bytes in flight; the receiver's chunk hash catches it and the sender retransmits."));
   return { el, update(s, m) {
     el.hidden = !(m.net && m.net.length); if (el.hidden) return; el.dataset.sid = s.sid;
+    const sig = JSON.stringify([m.net, s.ended]); if (sig === last) return; last = sig; // rebuilding buttons on every redraw would eat clicks
     body.replaceChildren(MP.table(["Path", "Listen port", "Delay ms", "Jitter ms", "Rate Mbit/s", "State", ""], m.net.map((p) => [p.path, p.listen_port, p.delay_ms || 0, p.jitter_ms || 0, p.rate_mbit || "unlimited",
       p.dead ? "killed" : "up", H("button", { type: "button", class: "kill", disabled: p.dead || s.ended, onclick: () => call("/api/session/" + s.sid + "/net/kill/" + p.path) }, "Kill path " + p.path)]), [0, 1, 2, 3, 4]));
   } };

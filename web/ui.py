@@ -103,7 +103,7 @@ def make_ui_app(node, ui_port=8000):
         """Context the live view cannot get from events: peer, capture ports, emulator paths."""
         job = node.jobs.get(sid)
         if job:
-            return {"role": "sender", "me": node.name, "peer": job.peer, "profile": job.profile, "state": job.state,
+            return {"role": "sender", "me": node.name, "peer": job.peer, "peer_name": job.peer_name, "profile": job.profile, "state": job.state,
                     "capture_ports": job.capture_ports(), "loopback": job.is_loopback(),
                     "net": job.emulator.state() if job.emulator else []}
         offer = next((o for o in node.offers.values() if o["session_id"] == sid), None)

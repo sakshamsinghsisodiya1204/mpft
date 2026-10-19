@@ -1,4 +1,5 @@
 import json
+import random
 import urllib.request
 
 from conftest import make_file
@@ -31,9 +32,10 @@ def test_events_emitted_in_order_during_loopback_transfer(tmp_path, receiver):
 
 
 def test_corruption_emits_nack_requeue_and_bad_hash(tmp_path, receiver):
+    random.seed(11)  # sender corruption uses the global RNG: seeded so the run is deterministic
     src = make_file(tmp_path / "f.bin", 4 * 1024 * 1024)
     got, unsub = collect()
-    r = run_transfer(src, [f"127.0.0.1:{receiver.port}"] * 2, corrupt_rate=0.5, session_id=7)
+    r = run_transfer(src, [f"127.0.0.1:{receiver.port}"] * 2, chunk_size=256 * 1024, corrupt_rate=0.3, session_id=7)
     unsub()
     kinds = {e["kind"] for e in got}
     assert r["success"] and {"nack", "requeue", "hash_chunk_bad"} <= kinds

@@ -1,5 +1,5 @@
 """Network-condition profiles: start emulator proxies in front of the receiver's MPFT port."""
-from mpft.emulator import start_emulator
+from mpft.emulator import BLOCK, start_emulator
 
 PROFILES = ("none", "asymmetric", "lossy", "path_failure")
 
@@ -13,7 +13,7 @@ def path_configs(profile, host, port, n, chunk_size):
             c.update(delay_ms=5 + 20 * i, jitter_ms=2 * i, rate_mbit=max(40 // (i + 1), 2))
         elif profile == "lossy":
             c.update(delay_ms=10, jitter_ms=5, rate_mbit=20)
-            c["corrupt_rate"] = 0.02
+            c["corrupt_rate"] = 1 - 0.95 ** (1 / max(1, chunk_size // BLOCK))  # about 5% of chunks damaged
         elif profile == "path_failure":
             c.update(delay_ms=10, jitter_ms=3, rate_mbit=20)
             if i == n - 1 and n > 1:

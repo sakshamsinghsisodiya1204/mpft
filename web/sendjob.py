@@ -30,7 +30,7 @@ class SendJob:
         self.paths, self.chunk_size, self.profile, self.cleanup_dir = paths, chunk_size, profile, cleanup_dir
         self.sid = random.getrandbits(32)
         self.state, self.message, self.emulator, self.result = "starting", "", None, None
-        self.peer, self.targets = None, []
+        self.peer, self.peer_name, self.targets = None, None, []
         node.jobs[self.sid] = self
         node.seen.add(self.sid)
 
@@ -68,6 +68,7 @@ class SendJob:
             rid, code = self.resolve()
             host, port = decode_id(rid)
             self.peer = f"{host}:{port}"
+            self.peer_name = httpx.get(f"http://{host}:{port}/health", timeout=5).json().get("name")  # also checks reachability
             self.set_state("hashing", "Computing SHA-256")
             offer = {"sender": self.node.name, "file_name": safe_name(os.path.basename(self.path)), "size": size,
                      "sha256": file_sha256(self.path), "session_id": self.sid, "paths": self.paths,
