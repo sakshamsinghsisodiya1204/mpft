@@ -51,3 +51,31 @@ def test_emulator_control_port_kills_path_and_sets_corruption():
     assert post("/kill/0")[0]["dead"] is True
     assert json.load(urllib.request.urlopen(base + "/state"))[0]["dead"]
     srv.shutdown()
+
+
+def test_killed_path_emits_down_reason_backoff_restored_and_rtt(tmp_path, receiver):
+    import threading
+    import time
+    src = make_file(tmp_path / "f.bin", 24 * 1024 * 1024)
+    emu = start_emulator([{"listen_port": 0, "to": f"127.0.0.1:{receiver.port}", "rate_mbit": 40} for _ in range(2)])
+    ports = [p.srv.getsockname()[1] for p in emu.paths]
+    for p, port in zip(emu.paths, ports):
+        p.cfg["listen_port"] = port
+    got, unsub = collect()
+
+    def chaos():
+        time.sleep(0.7)
+        emu.kill(1)
+        time.sleep(0.5)
+        emu.restore(1)
+    threading.Thread(target=chaos, daemon=True).start()
+    r = run_transfer(src, [f"127.0.0.1:{p}" for p in ports], chunk_size=256 * 1024, session_id=99)
+    unsub()
+    emu.stop()
+    assert r["success"]
+    kinds = {e["kind"] for e in got if e.get("session") == 99 or e["kind"].startswith("emulator")}
+    assert {"path_down", "emulator_path_killed", "emulator_path_restored", "rtt_sample"} <= kinds
+    down = [e for e in got if e["kind"] == "path_down" and e.get("reason")]
+    assert down and down[0]["path"] == 1
+    inflight = [e for e in got if e["kind"] == "chunk_state" and e["state"] == "inflight"][0]
+    assert inflight["size"] > 0 and "offset" in inflight

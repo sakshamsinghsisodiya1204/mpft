@@ -38,7 +38,7 @@ class SendJob:
 
     def set_state(self, state, message=""):
         self.state, self.message = state, message
-        ev.emit("send_state", node=self.node.name, session=self.sid, state=state, message=message)
+        ev.emit("send_state", node=self.node.name, role="sender", session=self.sid, state=state, message=message)
 
     def capture_ports(self):
         """Ports the sender connects to: the receiver's transfer port, or the emulator proxies in front of it."""
@@ -97,9 +97,12 @@ class SendJob:
                      "sha256": file_sha256(self.path), "session_id": self.sid, "paths": self.paths,
                      "chunk_size": self.chunk_size, "code": code}
             self.set_state("offered", "Waiting for the receiver to accept" if not code else "Offer sent")
+            ev.emit("offer_sent", role="sender", session=self.sid, peer=self.peer, size=size)
             t0 = time.time()
             r = httpx.post(f"http://{host}:{port}/offer", json=offer, timeout=150).json()
             t3 = time.time()
+            ev.emit("offer_" + ("accepted" if r.get("status") == "accepted" else "declined"), role="sender", session=self.sid,
+                    reason=r.get("reason"))
             if r.get("status") != "accepted":
                 raise RuntimeError(r.get("reason") or r.get("detail") or "Receiver did not accept.")
             # NTP-style offset (receiver clock minus ours); the receiver's wait for Accept cancels out

@@ -85,10 +85,14 @@ class Sender:
                 if fails >= MAX_PATH_FAILS:
                     break
                 if fails:  # exponential backoff before reconnecting a flaky path
-                    self.stop.wait(min(0.1 * 2 ** fails, 2.0))
+                    delay = min(0.1 * 2 ** fails, 2.0)
+                    ev.emit("backoff", role="sender", session=self.sid, path=pid, delay=delay, fails=fails)
+                    self.stop.wait(delay)
                 sock = self.connect(pid)
                 if sock is None:
                     break
+                if fails:
+                    ev.emit("path_restored", role="sender", session=self.sid, path=pid)
                 try:
                     self.ensure_manifest(sock)
                 except (OSError, ProtocolError):
@@ -103,7 +107,7 @@ class Sender:
                 fails = 0
             else:
                 fails += 1
-                ev.emit("path_down", role="sender", session=self.sid, path=pid, reason="send failed")
+                ev.emit("path_down", role="sender", session=self.sid, path=pid, reason=getattr(self, "fail_reason", "send failed"))
                 self.fail_path(pid, idx)
                 sock.close()
                 sock = None
@@ -124,12 +128,15 @@ class Sender:
             data = bytes(flipped)
         start = time.perf_counter()
         ev.emit("chunk_state", role="sender", session=self.sid, index=idx, state="inflight", path=pid,
-                attempt=self.attempts.get(idx, 0) + 1)
+                attempt=self.attempts.get(idx, 0) + 1, offset=idx * self.cs, size=len(data))
         ev.message("sender", self.sid, CHUNK, idx, len(data), pid, "out")
         try:
             send_msg(sock, CHUNK, self.sid, idx, data)
             mtype, _, ridx, _ = recv_msg(sock)
-        except (OSError, ProtocolError):  # timeout, reset or garbage: treat the path as failed
+        except (OSError, ProtocolError) as e:  # timeout, reset or garbage: treat the path as failed
+            self.fail_reason = "timeout" if isinstance(e, TimeoutError) else type(e).__name__
+            if isinstance(e, TimeoutError):
+                ev.emit("timeout", role="sender", session=self.sid, index=idx, path=pid, after_s=self.timeout)
             return False
         ev.message("sender", self.sid, mtype, ridx, 0, pid, "in")
         if mtype == ACK and ridx == idx:
@@ -149,6 +156,7 @@ class Sender:
                     bytes=nbytes, rtt_ms=round(rtt_ms, 2))
             self.path_bytes[pid] += nbytes
             self.rtts.append(rtt_ms)
+            self.tick_rtts.setdefault(pid, []).append(rtt_ms)
             self.events.append((round(now, 4), pid, nbytes))
             if idx in self.fail_pending:
                 self.fail_pending.discard(idx)
@@ -172,9 +180,12 @@ class Sender:
             n = self.attempts[idx] = self.attempts.get(idx, 0) + 1
         if n > MAX_RETRIES:
             self.error = f"chunk {idx} failed {MAX_RETRIES} retries"
+            ev.emit("chunk_state", role="sender", session=self.sid, index=idx, state="failed", path=pid, attempt=n)
             self.stop.set()
             return
-        ev.emit("requeue", role="sender", session=self.sid, index=idx, path=pid, attempt=n)
+        ev.emit("requeue", role="sender", session=self.sid, index=idx, path=pid, attempt=n, count=n,
+                reason=getattr(self, "fail_reason", "nack") if pid is not None and idx in self.fail_pending else "nack",
+                delay=min(0.05 * 2 ** (n - 1), 1.0))
         ev.emit("chunk_state", role="sender", session=self.sid, index=idx, state="retransmitted", path=pid, attempt=n)
         timer = threading.Timer(min(0.05 * 2 ** (n - 1), 1.0), self.q.put, ((0, idx),))
         timer.daemon = True
@@ -211,6 +222,7 @@ class Sender:
 
     def run(self):
         self.done = False
+        self.tick_rtts = {}
         self.t0 = time.time()
         ev.emit("session_started", role="sender", session=self.sid, file_name=self.m["name"],
                 file_size=self.m["size"], file_sha256=self.m["file_sha256"], chunk_size=self.cs,
@@ -228,6 +240,10 @@ class Sender:
                     ev.emit("throughput_tick", role="sender", session=self.sid, path=p,
                             mbit=round((b - last_bytes[p]) * 8 / 1e6 / dt, 3), bytes=b)
                     last_bytes[p] = b
+                    r = self.tick_rtts.pop(p, [])
+                    if r:
+                        ev.emit("rtt_sample", role="sender", session=self.sid, path=p, mean_ms=round(sum(r) / len(r), 2),
+                                min_ms=round(min(r), 2), max_ms=round(max(r), 2))
         self.stop.set()
         for t in threads:
             t.join()
@@ -235,7 +251,8 @@ class Sender:
         elapsed = time.time() - self.t0
         self.done = ok
         writer.stop()
-        ev.emit("session_done", role="sender", session=self.sid, success=ok, error=self.error, elapsed_s=round(elapsed, 3))
+        ev.emit("session_done", role="sender", session=self.sid, success=ok, error=self.error, elapsed_s=round(elapsed, 3),
+                retransmits=self.retransmits, bytes_per_path=dict(self.path_bytes))
         for s in self.socks.values():
             s.close()
         os.close(self.fd)

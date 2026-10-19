@@ -113,7 +113,8 @@ class Node:
             if sum(1 for x in self.offers.values() if x["state"] == "pending") >= MAX_PENDING:
                 return {"status": "rejected", "reason": "Receiver has too many pending offers. Try again later."}
             self.offers[oid] = offer
-        ev.emit("offer_received", node=self.name, offer=self.public_offer(offer), auto=trusted)
+        self.seen.add(o["session_id"])
+        ev.emit("offer_received", node=self.name, role="receiver", session=o["session_id"], offer=self.public_offer(offer), auto=trusted)
         if trusted:
             return self._accept(offer)
         offer["event"].wait(OFFER_WAIT_S)
@@ -129,6 +130,7 @@ class Node:
         offer["state"] = state
         offer["event"].set()
         ev.emit("offer_resolved", node=self.name, offer=self.public_offer(offer))
+        ev.emit("offer_" + state, node=self.name, role="receiver", session=offer["session_id"])
 
     def _accept(self, offer):
         stage = os.path.join(self.out_dir, ".incoming", offer["id"])
