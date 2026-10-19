@@ -13,3 +13,4 @@
 - Phase 5 done: wireshark/mpft.lua (Lua syntax-checked only; no Wireshark here), CAPTURE.md, docs/REMOTE.md (untested on real hardware).
 - Phase 6 done: web/app.py + static html/css/js, `python -m mpft dashboard --port 8080`; verified live in browser. status JSON gained file_sha256.
 - Phase 7 done: README + docs/{PROTOCOL,ARCHITECTURE,TEST_REPORT,DEMO_SCRIPT,VIVA_PREP,WALKTHROUGH,CONTRIBUTIONS}.md written from real CSVs.
+- Phase 8 done: scripts/make_pdfs.py (markdown + headless Chrome, images embedded) -> pdf/*.pdf and pdf/MPFT_Report.pdf (22 pages). Re-run after editing docs.
