@@ -1,0 +1,5 @@
+[
+  {"listen_port": 9201, "to": "127.0.0.1:9000", "delay_ms": 2,  "jitter_ms": 0,  "rate_mbit": 0,  "drop_after_s": 0, "corrupt_rate": 0},
+  {"listen_port": 9202, "to": "127.0.0.1:9000", "delay_ms": 20, "jitter_ms": 5,  "rate_mbit": 20, "drop_after_s": 0, "corrupt_rate": 0},
+  {"listen_port": 9203, "to": "127.0.0.1:9000", "delay_ms": 40, "jitter_ms": 10, "rate_mbit": 8,  "drop_after_s": 6, "corrupt_rate": 0}
+]
