@@ -110,3 +110,5 @@ def send_file(page, file_path, bob_id, bob_code, profile="path_failure", paths=2
     page.fill("#paths", str(paths))
     page.select_option("#profile", profile)
     page.click("button[type=submit]")
+    page.wait_for_function("location.hash.startsWith('#/transfer/')", timeout=60000)
+    return page.evaluate("location.hash").rsplit("/", 1)[1]

@@ -39,12 +39,18 @@ MP.views.receive = function (root) {
     } catch (e) { err.textContent = e.message; drawOffers(); }
   };
   const drawFiles = async () => {
-    const list = await MP.api("/api/received");
-    files.replaceChildren(list.length ? MP.table(["Name", "Size", "SHA-256", "Received", "Verified", ""],
-      list.slice().reverse().map((f) => [f.name, MP.bytes(f.size), MP.h("span", { class: "hash mono" }, f.sha256), MP.when(f.time), f.verified ? "yes" : "no",
-        MP.h("span", { class: "row" }, MP.h("a", { href: "/download/" + encodeURIComponent(f.name), download: f.name }, "Download"),
-          MP.h("button", { type: "button", class: "danger", onclick: async () => { if (confirm("Delete " + f.name + " from this Mac?")) { await MP.api("/api/received/" + encodeURIComponent(f.name), { method: "DELETE" }).catch((e) => (err.textContent = e.message)); drawFiles(); } } }, "Delete"))]), [1])
-      : MP.h("p", { class: "muted" }, "No files received yet."));
+    const list = await MP.api("/api/files");
+    const del = (f) => MP.h("button", { type: "button", class: "danger", "data-act": "delete", "aria-label": "Delete " + f.name, onclick: async () => {
+      if (!confirm("Delete " + f.name + " from this Mac?")) return;
+      await MP.api("/api/files/" + f.id, { method: "DELETE" }).catch((e) => (err.textContent = e.message)); drawFiles(); } }, "Delete");
+    const row = (f) => f.status === "ok"
+      ? [f.name, MP.bytes(f.size), MP.h("span", { class: "hash mono" }, f.sha256), MP.when(f.time), MP.h("span", { class: "badge ok" }, "verified"),
+        MP.h("span", { class: "row" }, MP.h("a", { class: "btn", "data-act": "download", href: "/api/files/" + f.id + "/download", download: f.name }, "Download"), del(f))]
+      : [f.name, MP.bytes(f.size), MP.h("span", { class: "hash mono" }, f.sha256), MP.when(f.time), MP.h("span", { class: "badge bad" }, "failed"),
+        MP.h("span", { class: "row" }, MP.h("span", { class: "err" }, f.error || "Not saved."), del(f))];
+    files.replaceChildren(list.length ? MP.table(["Name", "Size", "SHA-256", "Received", "Verified", ""], list.slice().reverse().map(row), [1])
+      : MP.h("p", { class: "muted", id: "files-empty" }, "No files received yet."));
+    files.firstChild.id = "received-files";
   };
   const refresh = () => MP.api("/api/info").then(showInfo).catch((e) => (err.textContent = e.message));
 

@@ -14,6 +14,7 @@ from mpft.receiver import start_receiver
 
 from .codes import CodeBook, RateLimiter, new_code, normalize
 from .ids import detect_hosts, encode_id
+from .received import ReceivedIndex
 from .sessionlog import SessionLog
 
 OFFER_WAIT_S = 120  # how long a sender's offer waits for Accept/Decline
@@ -46,10 +47,7 @@ class Node:
         self.log = SessionLog(os.path.join(self.state_dir, "sessions"))
         self.tokens, self.offsets, self.listeners = {}, {}, []  # sid -> session token / peer clock offset
         self.history = self._load_history()
-        self.received = [{"name": h["name"], "size": h["size"], "sha256": h["sha256"], "time": h["time"],
-                          "sender": h.get("peer", ""), "session": h.get("session"), "verified": True}
-                         for h in self.history if h.get("direction") == "receive" and h.get("result") == "ok"
-                         and os.path.isfile(os.path.join(self.out_dir, h["name"]))]
+        self.index = ReceivedIndex(self.out_dir)
         ev.subscribe(self._on_event)
         self.new_code()
 
@@ -209,6 +207,10 @@ class Node:
         """Events relayed from the peer: store them and pass them to the browser feed."""
         for e in self.log.add_remote(sid, side, events, offset):
             self._fan_out({**e, "mine": False})
+            if e["kind"] == "session_done" and side == "sender" and not e.get("success") and sid in self.sessions:
+                # the sender gave up: the receiver never sees a DONE, so record the failure from the relayed event
+                self._record_failure(self.sessions[sid]["offer"])
+                threading.Thread(target=self._cleanup, args=(sid, False), daemon=True).start()
 
     def _record(self, e):
         c = self._classify(e)
@@ -224,6 +226,8 @@ class Node:
             return
         if e["success"]:
             self._store_file(self.sessions[e["session"]])
+        else:
+            self._record_failure(self.sessions[e["session"]]["offer"])
         threading.Thread(target=self._cleanup, args=(e["session"], e["success"]), daemon=True).start()
 
     def _store_file(self, sess):
@@ -238,10 +242,14 @@ class Node:
                 n += 1
                 dest = f"{base} ({n}){ext}"
             os.rename(os.path.join(stage, files[0]), os.path.join(self.out_dir, dest))
-        entry = {"name": dest, "size": offer["size"], "sha256": offer["sha256"], "time": time.time(),
-                 "sender": offer["sender"], "session": offer["session_id"], "verified": True}  # receiver checked the whole-file SHA-256
-        self.received.append(entry)
+        # verified: the receiver checked the whole-file SHA-256 before it reported success
+        entry = self.index.add(dest, offer["size"], offer["sha256"], time.time(), offer["sender"], offer["session_id"], True)
         self.add_history({**entry, "direction": "receive", "peer": offer["sender"], "result": "ok"})
+        ev.emit("file_received", node=self.name, file=entry)
+
+    def _record_failure(self, offer):
+        entry = self.index.add(offer["file_name"], offer["size"], offer["sha256"], time.time(), offer["sender"], offer["session_id"], False,
+                               "Transfer did not complete or the SHA-256 did not match. The file was not saved.")
         ev.emit("file_received", node=self.name, file=entry)
 
     def _cleanup(self, sid, success=True):
@@ -252,19 +260,3 @@ class Node:
             sess["handle"].stop()
             if success:
                 shutil.rmtree(sess["stage"], ignore_errors=True)
-
-    def forget_received(self, name):
-        """Delete a received file we stored (name is looked up in our list, never used as a path)."""
-        path = self.download_path(name)
-        if path:
-            try:
-                os.remove(path)
-            except FileNotFoundError:
-                pass
-            self.received = [r for r in self.received if r["name"] != name]
-
-    def download_path(self, name):
-        """Absolute path of a received file, or None. Only names we stored are served: no traversal."""
-        if any(r["name"] == name for r in self.received):
-            return os.path.join(self.out_dir, name)
-        return None

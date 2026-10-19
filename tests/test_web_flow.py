@@ -73,11 +73,11 @@ def test_id_offer_accept_transfers_10mb(tmp_path, rv):
     job = SendJob(alice, src, "id", bob.id, paths=3).start()
     assert wait(job) == "done", job.message
     assert (tmp_path / "bob" / "data.bin").stat().st_size == 10 * 1024 * 1024
-    assert bob.received[0]["name"] == "data.bin" and not (tmp_path / "bob" / ".incoming" / "x").exists()
+    assert bob.index.items[0]["name"] == "data.bin" and not (tmp_path / "bob" / ".incoming" / "x").exists()
     # same name again: never overwrites
     auto_decide(bob)
     assert wait(SendJob(alice, src, "id", bob.id, paths=2).start()) == "done"
-    assert sorted(r["name"] for r in bob.received) == ["data (1).bin", "data.bin"]
+    assert sorted(r["name"] for r in bob.index.items) == ["data (1).bin", "data.bin"]
     assert alice.history[-1]["direction"] == "send" and bob.history[-1]["direction"] == "receive"
 
 
@@ -118,4 +118,4 @@ def test_decline_and_size_limit(tmp_path, rv):
     auto_decide(bob, accept=False)
     job = SendJob(alice, src, "id", bob.id)
     assert wait(job.start()) == "failed" and "declined" in job.message.lower()
-    assert not bob.received
+    assert not bob.index.items

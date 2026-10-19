@@ -157,6 +157,7 @@ MP.views.transfer = function (root, sid) {
   if (!known) MP.api("/api/session/" + sid + "/events").then((evs) => { evs.forEach(apply); s.dirty = new Set(); draw(); }).catch(() => {});
   loadMeta(); draw();
   const off = MP.on((e) => {
+    if (e.kind === "file_received" && e.file && e.file.session === s.sid) loadMeta();
     if (e.session !== s.sid) return;
     apply(e);
     if (["send_state", "session_started", "emulator_path_killed", "emulator_path_restored"].includes(e.kind)) loadMeta();

@@ -9,7 +9,7 @@ MP.panel = panel;
 MP.pathLabel = (id) => H("span", { class: "mono", style: "color:" + MP.PATH_COLORS[id % 8] }, "path " + id);
 
 MP.panels.header = () => {
-  const f = {}; const rows = ["File", "Size", "SHA-256", "Session", "Direction", "Addresses", "State", "Viewing as"];
+  const f = {}; const rows = ["File", "Size", "SHA-256", "Session", "Direction", "Addresses", "State", "Received file", "Viewing as"];
   const tbl = H("table", {}, H("tbody", {}, rows.map((r) => H("tr", {}, H("th", {}, r), f[r] = H("td", { class: /SHA|Session|Addresses|Size/.test(r) ? "hash mono" : "" })))));
   return { el: panel("Session", H("div", { class: "table-wrap" }, tbl)), update(s, m) {
     f.File.textContent = s.name || "-"; f.Size.textContent = s.size != null ? MP.bytes(s.size) + " (" + s.size + " B)" : "-";
@@ -20,6 +20,12 @@ MP.panels.header = () => {
     f.State.textContent = s.phase + (s.message && !s.ended ? " (" + s.message + ")" : "") + (s.ended && s.message ? ": " + s.message : "");
     f.State.className = s.phase === "failed" ? "err" : "";
     f["Viewing as"].textContent = m.replay ? "replay of the merged sender+receiver log" : (m.role || s.role || "?") + " on " + me + "; both sides' events are merged";
+    const fl = m.file, c = f["Received file"], key = m.role + (fl ? fl.id + fl.status : "") + s.ended;
+    if (c.dataset.k === key) return; c.dataset.k = key;
+    if (m.role !== "receiver") c.textContent = "n/a (this side sent the file)";
+    else if (!fl) c.textContent = s.ended ? "not saved" : "not yet received";
+    else if (fl.status === "ok") c.replaceChildren(H("a", { class: "btn primary", id: "session-download", href: "/api/files/" + fl.id + "/download", download: fl.name }, "Download " + fl.name));
+    else c.replaceChildren(H("span", { class: "err", id: "session-failed" }, fl.error || "Transfer failed. Nothing was saved."));
   } };
 };
 
