@@ -59,9 +59,10 @@ MP.panels.graphs = () => {
   let last = null, timer = null, lastDraw = 0;
   const share = (svg, s) => {
     const ids = Object.keys(s.paths).sort((a, b) => a - b), sum = ids.reduce((a, i) => a + s.paths[i].bytes, 0), W = Math.max(280, Math.round(svg.getBoundingClientRect().width) || 640);
-    svg.setAttribute("viewBox", `0 0 ${W} ${HT}`); svg.setAttribute("height", HT); svg.dataset.state = sum ? "ready" : "empty";
+    const H2 = sum ? Math.min(HT, 30 + ids.length * 34) : HT; // bar chart needs less height than the line charts
+    svg.setAttribute("viewBox", `0 0 ${W} ${H2}`); svg.setAttribute("height", H2); svg.style.height = H2 + "px"; svg.dataset.state = sum ? "ready" : "empty";
     if (!sum) { svg.replaceChildren(sv("text", { x: W / 2, y: HT / 2, "text-anchor": "middle", class: "empty" }, "Waiting for data")); return; }
-    const row = Math.min(34, (HT - 24) / ids.length), k = [];
+    const row = 34, k = [];
     ids.forEach((i, n) => { const b = s.paths[i].bytes, w = ((W - 190) * b) / sum, y = 12 + n * row;
       k.push(sv("text", { x: 4, y: y + row / 2 + 1, class: "dlabel", style: "fill:" + MP.PATH_COLORS[i % 8] }, "path " + i),
         sv("rect", { x: 56, y, width: Math.max(w, 1), height: row - 8, class: "sharebar", "data-path": i, style: "fill:" + MP.PATH_COLORS[i % 8] }),
@@ -74,7 +75,7 @@ MP.panels.graphs = () => {
     const tot = Object.entries(total).sort((a, b) => a[0] - b[0]).map(([t, v]) => [+t, v]);
     const tmax = Math.max(5, (s.tEnd || Date.now() / 1000) - (s.t0 || Date.now() / 1000), ...[ser, s.rttSeries, s.inflightSeries].flatMap((m) => Object.values(m).map((a) => (a.length ? a[a.length - 1][0] : 0))));
     const m = s.marks, step = (x) => ({ ...x, step: true });
-    MP.chart(svgs.throughput, [...pathSeries(ser), { label: "total", pts: tot, color: "var(--fg)", dash: "" }], m, tmax, "Mbit/s");
+    MP.chart(svgs.throughput, [...pathSeries(ser), { label: "total", pts: tot, color: "var(--text)", dash: "" }], m, tmax, "Mbit/s");
     MP.chart(svgs.chunks, [{ label: "done", pts: s.cum, color: "var(--accent)", dash: "" }].map(step), m, tmax, "chunks done");
     MP.chart(svgs.inflight, pathSeries(s.inflightSeries).map(step), m, tmax, "chunks in flight");
     MP.chart(svgs.rtt, pathSeries(s.rttSeries), m, tmax, "round trip, ms");

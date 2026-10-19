@@ -1,5 +1,5 @@
 // Transfer state: a reducer turns the merged sender+receiver events of one session into a state object that panels render.
-MP.PATH_COLORS = ["#1f5f5b", "#8a5a2b", "#4a5a8a", "#7a4a6a", "#5f6b2e", "#3f3f3a", "#9a4a3a", "#2e6f8a"];
+MP.PATH_COLORS = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => "var(--p" + i + ")"); // CSS variables, so light and dark themes recolour them
 MP.PATH_DASH = ["", "6 3", "2 2", "8 3 2 3", "1 3", "10 4", "4 2 1 2", "12 3"];
 MP.newState = (sid) => ({ sid, role: null, phase: "starting", message: "", total: 0, done: 0, retx: 0, nacks: 0, bytes: 0,
   hasSender: false, sawTicks: false, okRecv: 0, badRecv: 0, badIdx: [], paths: {}, series: {}, bucket: { sec: 0, bytes: {} }, log: [], trace: [],
@@ -133,10 +133,12 @@ MP.explain = function (inc) {
 
 // Build all panels for a state object; draw(s) refreshes them. Shared by the live view and Replay.
 MP.buildTransfer = function (root, s, meta, extra = []) {
-  const P = [MP.panels.header, MP.panels.progress, MP.panels.chunkmap, MP.panels.chunktable, MP.panels.paths, MP.panels.incidents,
-    MP.panels.graphs, MP.panels.verify, MP.panels.network, MP.panels.trace, MP.panels.logs, MP.panels.wireshark].map((f) => f(s, meta));
-  const left = MP.h("div", {}, ...P.slice(0, 6).map((p) => p.el)), right = MP.h("div", {}, ...P.slice(6).map((p) => p.el));
-  root.append(...extra, MP.h("div", { class: "cols" }, left, right));
+  // [panel factory, grid columns of 12]
+  const layout = [[MP.panels.strip, 12], [MP.panels.progress, 12], [MP.panels.chunkmap, 12], [MP.panels.graphs, 12], [MP.panels.paths, 12], [MP.panels.incidents, 6], [MP.panels.verify, 6],
+    [MP.panels.chunktable, 12], [MP.panels.header, 6], [MP.panels.network, 6], [MP.panels.trace, 6], [MP.panels.logs, 6], [MP.panels.wireshark, 12]];
+  const P = layout.map(([f]) => f(s, meta));
+  P.forEach((p, i) => p.el.classList.add("s" + layout[i][1]));
+  root.append(...extra, MP.h("div", { class: "grid12" }, ...P.map((p) => p.el)));
   return { draw: (st) => { P.forEach((p) => p.update(st, meta)); st.dirty.clear(); } };
 };
 
@@ -170,5 +172,5 @@ MP.views.transfer = function (root, sid) {
 MP.transferList = function (root) {
   const ids = Object.keys(MP.events.bySession).filter((k) => MP.events.bySession[k].some((e) => e.kind === "session_started" || e.kind === "send_state"));
   root.append(MP.h("h1", {}, "Transfers"), ids.length ? MP.h("ul", {}, ids.reverse().map((k) =>
-    MP.h("li", {}, MP.h("a", { href: "#/transfer/" + k }, "Session " + k)))) : MP.h("p", { class: "muted" }, "No transfers in this browser session. Send or accept a file first, or open one from History."));
+    MP.h("li", {}, MP.h("a", { href: "#/transfer/" + k }, "Session " + k)))) : MP.h("p", { class: "muted" }, "No transfers yet. Send a file to begin."));
 };

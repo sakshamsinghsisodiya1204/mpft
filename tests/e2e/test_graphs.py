@@ -17,7 +17,7 @@ def check(page, world):
     page.wait_for_timeout(600)
     for g in GRAPHS:
         d = page.evaluate(JS, g)
-        assert d["w"] > 200 and d["h"] > 100, (g, d["w"], d["h"])
+        assert d["w"] > 200 and d["h"] > 60, (g, d["w"], d["h"])
         assert d["state"] == "ready", (g, d["state"], d["text"])
         assert not d["nan"], g
         for s in d["series"]:

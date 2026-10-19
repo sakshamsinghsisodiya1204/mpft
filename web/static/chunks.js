@@ -1,6 +1,7 @@
 // Chunk map (canvas, scales past 20,000 chunks by grouping) and the sortable chunk table.
 const HC = MP.h;
-const CELL = 7, MAX_CELLS = 6000; // px per cell incl. gap; above MAX_CELLS chunks, several chunks share a cell
+let CELL = 9;
+const MAX_CELLS = 6000; // px per cell incl. gap; above MAX_CELLS chunks, several chunks share a cell
 const NAMES = ["pending", "in flight", "done", "failed"];
 
 MP.panels.chunkmap = (s0, meta) => {
@@ -8,7 +9,7 @@ MP.panels.chunkmap = (s0, meta) => {
   const legend = HC("p", { class: "legend" }, ...[["", "pending"], ["f", "in flight (hatched)"], ["d", "done"], ["r", "retransmitted (outline)"], ["x", "failed (crossed)"]].map(([c, t]) => HC("span", {}, HC("i", { class: c }), t)));
   let S = null, k = 1, cols = 1;
   const hatch = document.createElement("canvas"); hatch.width = hatch.height = 4;
-  const hx = hatch.getContext("2d"); hx.fillStyle = "#fff"; hx.fillRect(0, 0, 4, 4); hx.strokeStyle = "#7f9f9b"; hx.beginPath(); hx.moveTo(0, 4); hx.lineTo(4, 0); hx.stroke();
+  const paintHatch = (bg, fg) => { const hx = hatch.getContext("2d"); hx.fillStyle = bg; hx.fillRect(0, 0, 4, 4); hx.strokeStyle = fg; hx.beginPath(); hx.moveTo(0, 4); hx.lineTo(4, 0); hx.stroke(); };
   const group = (c) => { const lo = c * k, hi = Math.min(lo + k, S.total); let d = 0, fl = 0, rx = 0, fa = 0; for (let i = lo; i < hi; i++) { const v = S.cell[i]; if (v === 2) d++; else if (v === 1) fl++; else if (v === 3) fa++; if (S.retxFlag[i]) rx = 1; } return { d, fl, rx, fa, n: hi - lo }; };
   const cellAt = (ev) => { const r = cv.getBoundingClientRect(), x = Math.floor(((ev.clientX - r.left) * cv.width) / r.width / CELL), y = Math.floor(((ev.clientY - r.top) * cv.height) / r.height / CELL); return y * cols + x; };
   cv.addEventListener("mousemove", (ev) => {
@@ -20,17 +21,19 @@ MP.panels.chunkmap = (s0, meta) => {
   cv.addEventListener("click", (ev) => { const c = cellAt(ev); if (S && c >= 0 && c * k < S.total) { S.selected = c * k; meta.onSelect && meta.onSelect(c * k); } });
   const draw = (s) => {
     S = s; if (!s.total) return;
-    const w = Math.max(cv.parentNode.clientWidth - 2, 200); k = Math.max(1, Math.ceil(s.total / MAX_CELLS));
+    const w = Math.max(cv.parentNode.clientWidth - 34, 120); // panel padding (2 x 16 px) and canvas border k = Math.max(1, Math.ceil(s.total / MAX_CELLS)); CELL = s.total <= 64 ? 24 : s.total <= 400 ? 14 : 9; // few chunks get big cells
     cols = Math.max(1, Math.floor(w / CELL)); const n = Math.ceil(s.total / k), rows = Math.ceil(n / cols);
     if (cv.width !== cols * CELL || cv.height !== rows * CELL) { cv.width = cols * CELL; cv.height = rows * CELL; }
+    const C = { done: MP.css("--accent"), bg: MP.css("--surface"), line: MP.css("--border-strong"), retx: MP.css("--text"), err: MP.css("--err"), p: [0, 1, 2, 3, 4, 5, 6, 7].map((i) => MP.css("--p" + i)) };
+    paintHatch(C.bg, C.done); // pending / done / in-flight colours come from the theme
     const g = cv.getContext("2d"), pat = g.createPattern(hatch, "repeat"); g.clearRect(0, 0, cv.width, cv.height);
     for (let c = 0; c < n; c++) {
       const x = (c % cols) * CELL, y = Math.floor(c / cols) * CELL, q = group(c);
-      g.fillStyle = q.d === q.n ? "#1f5f5b" : q.d + q.fl ? pat : "#fff"; g.fillRect(x, y, CELL - 1, CELL - 1);
-      g.strokeStyle = "#cfcdc4"; g.lineWidth = 1; if (q.d !== q.n) g.strokeRect(x + .5, y + .5, CELL - 2, CELL - 2);
-      if (q.rx) { g.strokeStyle = "#1b1b1a"; g.lineWidth = 1.5; g.strokeRect(x + 1, y + 1, CELL - 3, CELL - 3); }
-      if (q.fa) { g.strokeStyle = "#a02622"; g.beginPath(); g.moveTo(x, y); g.lineTo(x + CELL - 1, y + CELL - 1); g.moveTo(x + CELL - 1, y); g.lineTo(x, y + CELL - 1); g.stroke(); }
-      if (k === 1 && s.cpath[c] >= 0) { g.fillStyle = MP.PATH_COLORS[s.cpath[c] % 8]; g.fillRect(x, y + CELL - 3, CELL - 1, 2); } // path colour tick on the bottom edge
+      g.fillStyle = q.d === q.n ? C.done : q.d + q.fl ? pat : C.bg; g.fillRect(x, y, CELL - 1, CELL - 1);
+      g.strokeStyle = C.line; g.lineWidth = 1; if (q.d !== q.n) g.strokeRect(x + .5, y + .5, CELL - 2, CELL - 2);
+      if (q.rx) { g.strokeStyle = C.retx; g.lineWidth = 1.5; g.strokeRect(x + 1, y + 1, CELL - 3, CELL - 3); }
+      if (q.fa) { g.strokeStyle = C.err; g.beginPath(); g.moveTo(x, y); g.lineTo(x + CELL - 1, y + CELL - 1); g.moveTo(x + CELL - 1, y); g.lineTo(x, y + CELL - 1); g.stroke(); }
+      if (k === 1 && s.cpath[c] >= 0) { g.fillStyle = C.p[s.cpath[c] % 8]; g.fillRect(x, y + CELL - 3, CELL - 1, 2); } // path colour tick on the bottom edge
     }
   };
   return { el: MP.panel("Chunk map", legend, cv, tip), update(s) { if (s.dirty.size || S !== s || cv.dataset.n !== String(s.total)) { cv.dataset.n = s.total; draw(s); } } };
@@ -53,9 +56,9 @@ MP.panels.chunktable = (s0, meta) => {
     const t = (x) => (Number.isNaN(x) ? "-" : "+" + (x - s.t0).toFixed(2));
     const rows = idx.slice(0, limit).map((i) => { const tr = HC("tr", { class: s.selected === i ? "sel" : "" }, [i, i * s.cs, MP.chunkLen(s, i), s.csha[i] || "-", s.cpath[i] < 0 ? "-" : s.cpath[i], s.attempts[i], t(s.tFirst[i]), t(s.tAck[i]),
       Number.isNaN(s.rtt[i]) ? "-" : s.rtt[i].toFixed(1), s.vBad[i] ? "rejected x" + s.vBad[i] + (s.vOk[i] ? ", then ok" : "") : s.vOk[i] ? "ok" : "-"].map((c, j) => HC("td", { class: j !== 3 && j !== 9 ? "num" : "mono" }, c))); return tr; });
-    const head = HC("tr", {}, cols.map(([n], j) => HC("th", { class: "sort" + (j !== 3 && j !== 9 ? " num" : ""), tabindex: "0", "aria-sort": sort === j ? (dir > 0 ? "ascending" : "descending") : "none",
+    const head = HC("tr", {}, cols.map(([n], j) => HC("th", { class: "sort" + (j !== 3 && j !== 9 ? " num" : ""), tabindex: "0", onkeydown: (ev) => ev.key === "Enter" && ev.target.click(), "aria-sort": sort === j ? (dir > 0 ? "ascending" : "descending") : "none",
       onclick: () => { dir = sort === j ? -dir : 1; sort = j; redraw(); } }, n + (sort === j ? (dir > 0 ? " ^" : " v") : ""))));
-    body.replaceChildren(HC("div", { class: "table-wrap", style: "max-height:260px;overflow:auto" }, HC("table", {}, HC("thead", {}, head), HC("tbody", {}, rows))),
+    body.replaceChildren(HC("div", { class: "table-wrap tall" }, HC("table", {}, HC("thead", {}, head), HC("tbody", {}, rows))),
       HC("p", { class: "muted" }, idx.length + " chunks match" + (idx.length > limit ? ", showing " + limit + " " : ""), idx.length > limit ? HC("button", { type: "button", onclick: () => { limit += 400; redraw(); } }, "Show more") : null));
   };
   [st, pf, multi, goto].forEach((e) => e.addEventListener("change", redraw)); goto.addEventListener("input", redraw);

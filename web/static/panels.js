@@ -9,8 +9,8 @@ MP.panel = panel;
 MP.pathLabel = (id) => H("span", { class: "mono", style: "color:" + MP.PATH_COLORS[id % 8] }, "path " + id);
 
 MP.panels.header = () => {
-  const f = {}; const rows = ["File", "Size", "SHA-256", "Session", "Direction", "Addresses", "State", "Received file", "Viewing as"];
-  const tbl = H("table", {}, H("tbody", {}, rows.map((r) => H("tr", {}, H("th", {}, r), f[r] = H("td", { class: /SHA|Session|Addresses|Size/.test(r) ? "hash mono" : "" })))));
+  const f = {}; const rows = ["File", "Size", "SHA-256", "Session", "Direction", "Addresses", "State", "Viewing as"];
+  const tbl = H("table", { class: "kv" }, H("tbody", {}, rows.map((r) => H("tr", {}, H("th", {}, r), f[r] = H("td", { class: /SHA|Session|Addresses|Size/.test(r) ? "hash mono" : "" })))));
   return { el: panel("Session", H("div", { class: "table-wrap" }, tbl)), update(s, m) {
     f.File.textContent = s.name || "-"; f.Size.textContent = s.size != null ? MP.bytes(s.size) + " (" + s.size + " B)" : "-";
     f["SHA-256"].textContent = s.sha || "-"; f.Session.textContent = s.sid + " (0x" + hex8(s.sid) + ")";
@@ -20,12 +20,29 @@ MP.panels.header = () => {
     f.State.textContent = s.phase + (s.message && !s.ended ? " (" + s.message + ")" : "") + (s.ended && s.message ? ": " + s.message : "");
     f.State.className = s.phase === "failed" ? "err" : "";
     f["Viewing as"].textContent = m.replay ? "replay of the merged sender+receiver log" : (m.role || s.role || "?") + " on " + me + "; both sides' events are merged";
-    const fl = m.file, c = f["Received file"], key = m.role + (fl ? fl.id + fl.status : "") + s.ended;
-    if (c.dataset.k === key) return; c.dataset.k = key;
-    if (m.role !== "receiver") c.textContent = "n/a (this side sent the file)";
-    else if (!fl) c.textContent = s.ended ? "not saved" : "not yet received";
-    else if (fl.status === "ok") c.replaceChildren(H("a", { class: "btn primary", id: "session-download", href: "/api/files/" + fl.id + "/download", download: fl.name }, "Download " + fl.name));
-    else c.replaceChildren(H("span", { class: "err", id: "session-failed" }, fl.error || "Transfer failed. Nothing was saved."));
+  } };
+};
+
+// Header strip: what is being transferred, its state and speed, and (receiver side) the Download button for the finished file.
+const STATE_KIND = { done: "ok", failed: "bad", transferring: "info", receiving: "info" };
+MP.panels.strip = () => {
+  const cell = (label, cls) => { const b = H("b", { class: cls === "m" ? "m" : "" }, "-"); return [H("div", { class: "cell" + (cls === "grow" ? " grow" : "") }, H("small", {}, label), b), b]; };
+  const [cf, vf] = cell("File", "grow"), [cs, vs] = cell("Size", "m"), [cst] = cell("State"), [ce, ve] = cell("Elapsed", "m"), [ct, vt] = cell("ETA", "m"), [cg, vg] = cell("Goodput", "m");
+  const act = H("div", { class: "cell", id: "file-action" }); let shown = "";
+  const strip = H("div", { class: "strip" }, cf, cs, cst, ce, ct, cg, act);
+  return { el: H("section", { class: "panel strip-panel", "aria-label": "Transfer summary" }, strip), update(s, m) {
+    vf.textContent = s.name || "waiting for the first event"; vs.textContent = s.size != null ? MP.bytes(s.size) : "-";
+    const kind = STATE_KIND[s.phase] || (/ing$/.test(s.phase) ? "warn" : ""), label = s.phase + (s.message && !s.ended ? ": " + s.message : "");
+    if (cst.dataset.k !== label + kind) { cst.dataset.k = label + kind; cst.querySelector("b").replaceChildren(MP.badge(kind, label)); MP.topState(s.phase, kind); }
+    const el = elapsed(s), avg = el > 1 ? (s.bytes * 8) / 1e6 / el : 0;
+    ve.textContent = MP.secs(el); vg.textContent = (s.ended ? avg : Object.keys(s.paths).reduce((a, id) => a + lastRate(s, id), 0)).toFixed(1) + " Mbit/s";
+    vt.textContent = s.ended || avg <= 0 ? "-" : MP.secs(((s.size - s.bytes) * 8) / 1e6 / avg);
+    const fl = m.file, key = m.role + (fl ? fl.id + fl.status : "") + s.ended; // rebuild only on change, or hover and clicks are lost
+    if (shown === key) return; shown = key;
+    if (m.role !== "receiver") act.replaceChildren();
+    else if (fl && fl.status === "ok") act.replaceChildren(H("small", {}, "Received file"), H("a", { class: "btn primary", id: "session-download", href: "/api/files/" + fl.id + "/download", download: fl.name }, "Download"));
+    else if (fl) act.replaceChildren(H("small", {}, "Not saved"), H("span", { class: "err", id: "session-failed" }, fl.error || "Transfer failed. Nothing was saved."));
+    else act.replaceChildren();
   } };
 };
 
@@ -48,8 +65,8 @@ MP.panels.paths = () => {
   const body = H("div"); return { el: panel("Paths", body), update(s) {
     const ids = Object.keys(s.paths).sort((a, b) => a - b);
     body.replaceChildren(ids.length ? MP.table(["Path", "Local -> remote", "State", "Bytes", "Chunks", "Mbit/s", "In flight", "RTT ms", "Jitter ms", "Retries", "Last event"],
-      ids.map((id) => { const p = s.paths[id]; return [MP.pathLabel(+id), (p.local || "?") + " -> " + (p.remote || "?"), H("span", { class: p.state === "down" ? "err" : "" }, p.state), MP.bytes(p.bytes), p.chunks,
-        lastRate(s, id).toFixed(1), s.inflight[id] || 0, p.n ? p.mean.toFixed(1) : "-", p.n > 1 ? Math.sqrt(p.m2 / (p.n - 1)).toFixed(1) : "-", p.retries, p.last]; }), [3, 4, 5, 6, 7, 8, 9]) : H("p", { class: "muted" }, "No paths yet."));
+      ids.map((id) => { const p = s.paths[id]; return [MP.pathLabel(+id), (p.local || "?") + " -> " + (p.remote || "?"), MP.badge(p.state === "down" ? "bad" : "ok", p.state), MP.bytes(p.bytes), p.chunks,
+        lastRate(s, id).toFixed(1), s.inflight[id] || 0, p.n ? p.mean.toFixed(1) : "-", p.n > 1 ? Math.sqrt(p.m2 / (p.n - 1)).toFixed(1) : "-", p.retries, p.last]; }), [3, 4, 5, 6, 7, 8, 9]) : MP.empty("No paths yet", "Paths appear when the transfer starts."));
   } };
 };
 
@@ -59,16 +76,16 @@ MP.panels.incidents = () => {
     const g = JSON.stringify(s.incidents.map((i) => [i.requeued, i.chunks.size, i.restoredAt, i.recoveredAt, i.backoffs.length]));
     if (g === sig) return; sig = g;
     const t = (x) => (x ? "+" + (x - s.t0).toFixed(1) + " s" : "-");
-    body.replaceChildren(s.incidents.length ? H("div", {}, MP.table(["#", "Detected", "Where", "Cause", "Requeued", "Backoff", "Recovered", "Recovery", "Absorbed by"],
-      s.incidents.map((i, n) => [n + 1, t(i.at), i.kind === "path" ? MP.pathLabel(i.path) : "chunk", i.cause, i.requeued, i.backoffs.map((b) => b.delay.toFixed(1) + "s").join(" > ") || "-",
-        t(i.recoveredAt), i.recoveredAt ? (i.recoveredAt - i.at).toFixed(2) + " s" : i.chunks.size ? "open" : "-", Object.entries(i.absorbed).map(([p, c]) => "path " + p + " x" + c).join(", ") || "-"]), [0, 4]),
-      H("ul", {}, s.incidents.map((i) => H("li", {}, MP.explain(i))))) : H("p", { class: "muted" }, "No failures so far."));
+    body.replaceChildren(s.incidents.length ? H("ol", { class: "timeline", id: "incident-list" }, s.incidents.map((i, n) => H("li", { class: i.recoveredAt ? "ok" : i.chunks.size ? "" : "warn" },
+      H("time", {}, t(i.at)), H("strong", {}, i.kind === "path" ? "path " + i.path + " down" : "chunk " + i.cause.split(" ")[1] + " rejected"), " ",
+      i.recoveredAt ? MP.badge("ok", "recovered after " + (i.recoveredAt - i.at).toFixed(2) + " s") : i.chunks.size ? MP.badge("bad", "open") : MP.badge("warn", "waiting"),
+      H("div", { class: "muted" }, MP.explain(i) + (i.requeued ? " Requeued " + i.requeued + "." : "") + (i.backoffs.length ? " Backoff " + i.backoffs.map((b) => b.delay.toFixed(1) + " s").join(", ") + "." : ""))))) : MP.empty("No failures so far", "Path failures and rejected chunks appear here as they happen."));
   } };
 };
 
 MP.panels.verify = () => {
   const v = {}, rows = ["Chunks verified", "Chunks rejected", "Rejected indexes", "Expected SHA-256", "Computed SHA-256", "Result"];
-  const tbl = H("table", {}, H("tbody", {}, rows.map((r) => H("tr", {}, H("th", {}, r), v[r] = H("td", { class: /SHA|ndex|verified|rejected/.test(r) ? "hash mono" : "" })))));
+  const tbl = H("table", { class: "kv" }, H("tbody", {}, rows.map((r) => H("tr", {}, H("th", {}, r), v[r] = H("td", { class: /SHA|ndex|verified|rejected/.test(r) ? "hash mono" : "" })))));
   return { el: panel("Verification", H("div", { class: "table-wrap" }, tbl)), update(s) {
     v["Chunks verified"].textContent = s.verify.ok + " / " + s.total; v["Chunks rejected"].textContent = s.verify.bad;
     v["Rejected indexes"].textContent = s.badIdx.length ? [...new Set(s.badIdx)].slice(0, 40).join(", ") + (new Set(s.badIdx).size > 40 ? " ..." : "") : "-";
@@ -85,8 +102,8 @@ MP.panels.trace = () => {
     S0 = s;
     const f = types.value, ctrl = ["HELLO", "MANIFEST", "MANIFEST_ACK", "NACK", "ERROR", "DONE"];
     const rows = s.trace.filter((m) => f === "all" || (f === "control only" ? ctrl.includes(m.type) : m.type === f)).slice().reverse();
-    body.replaceChildren(MP.table(["Time", "Side", "Dir", "Type", "Chunk", "Bytes", "Path"], rows.map((m) =>
-      [MP.clock(m.t), m.side || m.role, m.direction === "out" ? "send" : "recv", m.type, ["CHUNK", "ACK", "NACK"].includes(m.type) ? m.index : "-", m.length, m.path ?? "-"]), [4, 5, 6]));
+    body.replaceChildren(rows.length ? MP.table(["Time", "Side", "Dir", "Type", "Chunk", "Bytes", "Path"], rows.map((m) =>
+      [MP.clock(m.t), m.side || m.role, m.direction === "out" ? "send" : "recv", m.type, ["CHUNK", "ACK", "NACK"].includes(m.type) ? m.index : "-", m.length, m.path ?? "-"]), [4, 5, 6], "tall") : MP.empty("No messages yet", "Chunk and ACK messages are sampled."));
   } }; return api;
 };
 

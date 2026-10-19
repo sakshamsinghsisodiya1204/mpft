@@ -37,7 +37,7 @@ MP.api = async function (path, opts) {
 MP.post = (path, data) => MP.api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data || {}) });
 
 MP.copy = async function (text, btn) {
-  try { await navigator.clipboard.writeText(text); btn.textContent = "Copied"; }
+  try { await navigator.clipboard.writeText(text); btn.textContent = "Copied"; btn.setAttribute("role", "status"); }
   catch (e) { btn.textContent = "Select and copy"; }
   setTimeout(() => (btn.textContent = btn.dataset.label), 1500);
 };
@@ -46,8 +46,15 @@ MP.copyButton = (label, getText) => {
   b.addEventListener("click", () => MP.copy(getText(), b));
   return b;
 };
-MP.table = function (heads, rows, numCols = []) {
-  return MP.h("div", { class: "table-wrap" }, MP.h("table", {},
+MP.table = function (heads, rows, numCols = [], cls = "") {
+  return MP.h("div", { class: "table-wrap " + cls }, MP.h("table", {},
     MP.h("thead", {}, MP.h("tr", {}, heads.map((t, i) => MP.h("th", { class: numCols.includes(i) ? "num" : "" }, t)))),
     MP.h("tbody", {}, rows.map((r) => MP.h("tr", {}, r.map((c, i) => MP.h("td", { class: numCols.includes(i) ? "num" : "" }, c)))))));
 };
+
+// Status badge: coloured dot plus text. kind: ok | warn | bad | info | "" (neutral).
+MP.badge = (kind, text) => MP.h("span", { class: "badge " + kind }, text);
+// Top bar state of the current transfer (set by the Transfer view, cleared on every route change).
+MP.topState = (text, kind) => { const e = document.getElementById("top-state"); if (e) e.replaceChildren(text ? MP.badge(kind, text) : ""); };
+MP.css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim(); // canvas cannot use var()
+MP.empty = (title, text) => MP.h("div", { class: "empty-state" }, MP.h("strong", {}, title), text);
