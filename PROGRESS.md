@@ -11,3 +11,4 @@
 - Retries use PriorityQueue (retransmit before fresh chunks): recovery 6.9s -> 0.22s.
 - Findings: 1 path 23 Mbit/s of 40 (stop-and-wait per chunk); 8 paths 172; chunk 64K 50 vs 1M 107 Mbit/s.
 - Phase 5 done: wireshark/mpft.lua (Lua syntax-checked only; no Wireshark here), CAPTURE.md, docs/REMOTE.md (untested on real hardware).
+- Phase 6 done: web/app.py + static html/css/js, `python -m mpft dashboard --port 8080`; verified live in browser. status JSON gained file_sha256.
