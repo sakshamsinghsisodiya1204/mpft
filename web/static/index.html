@@ -3,15 +3,29 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MPFT status</title>
+<title>MPFT</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<main>
-  <h1>MPFT transfers</h1>
-  <p id="note">Waiting for status files in status/.</p>
-  <div id="sessions"></div>
-</main>
+<header>
+  <strong id="whoami">MPFT</strong>
+  <nav aria-label="Main">
+    <a href="#/send">Send</a>
+    <a href="#/receive">Receive</a>
+    <a href="#/transfer" id="nav-transfer">Transfer</a>
+    <a href="#/history">History</a>
+    <a href="#/about">About</a>
+  </nav>
+</header>
+<main id="view" tabindex="-1"></main>
+<script src="/static/util.js"></script>
+<script src="/static/store.js"></script>
+<script src="/static/send.js"></script>
+<script src="/static/receive.js"></script>
+<script src="/static/transfer.js"></script>
+<script src="/static/panels.js"></script>
+<script src="/static/history.js"></script>
+<script src="/static/about.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

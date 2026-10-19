@@ -60,6 +60,16 @@ Receiver: `python -m mpft receive --listen 0.0.0.0:9000 --out downloads`.
 Sender: `python -m mpft send file --to 100.x.y.z:9000 --paths 4`. Setup, firewall prompt, hotspot fallback and
 caveats about college WiFi and CGNAT: [docs/REMOTE.md](docs/REMOTE.md). (Not yet tested on real hardware.)
 
+## Web interface
+```bash
+python -m mpft rendezvous --host 127.0.0.1 --port 9100
+python -m mpft web --name alice --ui-port 8000 --peer-port 8001 --out ./alice-dl --host 127.0.0.1 --rendezvous http://127.0.0.1:9100
+python -m mpft web --name bob --ui-port 8010 --peer-port 8011 --out ./bob-dl --host 127.0.0.1 --rendezvous http://127.0.0.1:9100
+```
+Open `http://127.0.0.1:8000` (alice, Send) and `http://127.0.0.1:8010` (bob, Receive). Send by Receiver ID (receiver
+clicks Accept) or by one-time code. The Transfer page shows chunks, paths, throughput, hash checks, protocol messages,
+and lets you kill a path live. No built-in encryption; use Tailscale across networks. Details: [docs/WEB.md](docs/WEB.md).
+
 ## Dashboard
 ```bash
 python -m mpft dashboard          # http://127.0.0.1:8080, reads status/*.json

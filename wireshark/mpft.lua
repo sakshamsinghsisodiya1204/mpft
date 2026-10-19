@@ -65,3 +65,14 @@ end
 local tcp_port = DissectorTable.get("tcp.port")
 tcp_port:add(9000, mpft)
 for p = 9201, 9220 do tcp_port:add(p, mpft) end
+
+-- Web UI transfers use ephemeral ports, so also recognise MPFT by its header: "MP", version 1, type 1-8.
+local function heuristic(tvb, pinfo, tree)
+  if tvb:len() < HEADER_LEN or tvb(0, 2):string() ~= "MP" or tvb(2, 1):uint() ~= 1 then return false end
+  local t = tvb(3, 1):uint()
+  if t < 1 or t > 8 then return false end
+  pinfo.conversation = mpft  -- later segments of this connection (mid-chunk) go to us too
+  mpft.dissector(tvb, pinfo, tree)
+  return true
+end
+mpft:register_heuristic("tcp", heuristic)

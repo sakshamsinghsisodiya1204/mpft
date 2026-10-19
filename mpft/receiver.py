@@ -8,6 +8,7 @@ import threading
 
 from .protocol import (ACK, CHUNK, DONE, ERROR, HELLO, MANIFEST, MANIFEST_ACK, NACK, ProtocolError,
                        chunk_len, parse_addr, recv_msg, send_json, send_msg, sha256_hex, tune)
+from . import events as ev
 from .status import StatusWriter
 
 log = logging.getLogger("mpft.receiver")
@@ -18,7 +19,8 @@ class Session:
         self.id, self.m = session_id, manifest
         self.total, self.size, self.cs = manifest["total_chunks"], manifest["size"], manifest["chunk_size"]
         os.makedirs(out_dir, exist_ok=True)
-        self.final = os.path.join(out_dir, os.path.basename(manifest["name"]))  # basename: no path traversal
+        name = os.path.basename(manifest["name"])  # basename: no path traversal
+        self.final = os.path.join(out_dir, name if name not in ("", ".", "..") else "file")
         self.part = self.final + ".part"
         fresh = not os.path.exists(self.part)
         self.fd = os.open(self.part, os.O_RDWR | os.O_CREAT)
@@ -48,6 +50,8 @@ class Session:
         h = hashlib.sha256()
         for off in range(0, self.size, 1 << 20):
             h.update(os.pread(self.fd, min(1 << 20, self.size - off), off))
+        ev.emit("hash_file_verified" if h.hexdigest() == self.m["file_sha256"] else "hash_file_mismatch",
+                role="receiver", session=self.id, expected=self.m["file_sha256"], computed=h.hexdigest())
         if h.hexdigest() != self.m["file_sha256"]:
             self.hash_status = "mismatch"
             return False
@@ -105,6 +109,9 @@ class ReceiverHandle:
             if sess is None:
                 sess = self.sessions[sid] = Session(sid, manifest, self.out_dir)
                 sess.writer = StatusWriter("receiver", sid, sess.snapshot).start()
+                ev.emit("session_started", role="receiver", session=sid, file_name=manifest["name"],
+                        file_size=sess.size, file_sha256=manifest["file_sha256"], chunk_size=sess.cs,
+                        total_chunks=sess.total)
                 with sess.lock:
                     if len(sess.held) == sess.total:
                         sess.finalize()
@@ -118,11 +125,17 @@ class ReceiverHandle:
             with self.lock:
                 path_id = self.next_path[sid] = self.next_path.get(sid, -1) + 1
             log.info("session %d: path %d connected", sid, path_id)
+            ev.emit("path_up", role="receiver", session=sid, path=path_id, remote="%s:%d" % conn.getpeername()[:2],
+                    local="%s:%d" % conn.getsockname()[:2])
+            ev.message("receiver", sid, HELLO, 0, 0, path_id, "in")
             while True:
                 mtype, sid, idx, payload = recv_msg(conn)
                 sess = self.sessions.get(sid)
+                if mtype != CHUNK:
+                    ev.message("receiver", sid, mtype, idx, len(payload), path_id, "in")
                 if mtype == MANIFEST:
                     sess = self._open_session(sid, payload)
+                    ev.emit("manifest_received", role="receiver", session=sid, total_chunks=sess.total, held=len(sess.held))
                     send_json(conn, MANIFEST_ACK, sid, sorted(sess.held))
                 elif sess is None:
                     send_msg(conn, ERROR, sid, 0, b"no manifest")
@@ -132,8 +145,10 @@ class ReceiverHandle:
                     with sess.lock:
                         ok = len(sess.held) == sess.total and sess.finalize()
                     send_msg(conn, DONE if ok else ERROR, sid, 0, b"" if ok else b"incomplete or hash mismatch")
+                    ev.emit("session_done", role="receiver", session=sid, success=ok)
         except (ConnectionError, OSError, ProtocolError) as e:
             log.info("connection closed: %s", e)
+            ev.emit("path_down", role="receiver", session=locals().get("sid"), path=locals().get("path_id"))
         finally:
             conn.close()
             with self.lock:
@@ -145,7 +160,12 @@ class ReceiverHandle:
             with sess.lock:
                 sess.nacks += 1
             log.warning("session %d chunk %d failed verification -> NACK", sess.id, idx)
+            ev.emit("hash_chunk_bad", role="receiver", session=sess.id, index=idx, path=path_id)
+            ev.message("receiver", sess.id, NACK, idx, 0, path_id, "out")
             return NACK
+        ev.emit("hash_chunk_ok", role="receiver", session=sess.id, index=idx, path=path_id)
+        ev.message("receiver", sess.id, CHUNK, idx, len(data), path_id, "in")
+        ev.message("receiver", sess.id, ACK, idx, 0, path_id, "out")
         with sess.lock:
             if idx in sess.held:  # duplicate (retransmit after lost ACK): re-ACK, don't rewrite
                 sess.duplicates += 1

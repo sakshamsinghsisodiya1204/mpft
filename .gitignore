@@ -9,3 +9,5 @@ downloads/
 .DS_Store
 testdata/
 status/
+.mpft-state/
+uploads/

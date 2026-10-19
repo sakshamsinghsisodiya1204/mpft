@@ -1,4 +1,4 @@
-"""Command line: python -m mpft send|receive|emulate|dashboard"""
+"""Command line: python -m mpft send|receive|emulate|dashboard|web|rendezvous"""
 import argparse
 import csv
 import logging
@@ -7,7 +7,7 @@ import time
 
 
 def parse_size(text):
-    units = {"k": 1024, "m": 1024 ** 2}
+    units = {"k": 1024, "m": 1024 ** 2, "g": 1024 ** 3}
     return int(float(text[:-1]) * units[text[-1].lower()]) if text[-1].lower() in units else int(text)
 
 
@@ -43,12 +43,23 @@ def cmd_receive(a):
 
 def cmd_emulate(a):
     from .emulator import run_emulator
-    run_emulator(a.config)
+    run_emulator(a.config, a.control_port)
 
 
 def cmd_dashboard(a):
     import uvicorn
     uvicorn.run("web.app:app", host=a.host, port=a.port, log_level="warning")
+
+
+def cmd_web(a):
+    from web.main import run_web
+    run_web(a)
+
+
+def cmd_rendezvous(a):
+    import uvicorn
+    from web.rendezvous import make_rendezvous_app
+    uvicorn.run(make_rendezvous_app(), host=a.host, port=a.port, log_level="warning")
 
 
 def main(argv=None):
@@ -70,11 +81,25 @@ def main(argv=None):
     r.set_defaults(fn=cmd_receive)
     e = sub.add_parser("emulate")
     e.add_argument("--config", required=True)
+    e.add_argument("--control-port", type=int, help="HTTP control on 127.0.0.1: GET /state, POST /kill/N, POST /corrupt/RATE")
     e.set_defaults(fn=cmd_emulate)
     d = sub.add_parser("dashboard")
     d.add_argument("--host", default="127.0.0.1")
     d.add_argument("--port", type=int, default=8080)
     d.set_defaults(fn=cmd_dashboard)
+    w = sub.add_parser("web", help="browser UI for sending/receiving with a live dashboard")
+    w.add_argument("--name", required=True)
+    w.add_argument("--ui-port", type=int, default=8000, help="UI server (127.0.0.1 only)")
+    w.add_argument("--peer-port", type=int, default=8001, help="peer API on 0.0.0.0: /health and /offer")
+    w.add_argument("--out", default="downloads")
+    w.add_argument("--host", help="address to put in the Receiver ID (default: Tailscale, LAN, then 127.0.0.1)")
+    w.add_argument("--rendezvous", help="rendezvous URL, e.g. http://100.x.y.z:9100")
+    w.add_argument("--max-size", type=parse_size, default=2 * 1024 ** 3, help="largest accepted file, e.g. 500m")
+    w.set_defaults(fn=cmd_web)
+    rv = sub.add_parser("rendezvous", help="code -> Receiver ID lookup service")
+    rv.add_argument("--host", default="0.0.0.0")
+    rv.add_argument("--port", type=int, default=9100)
+    rv.set_defaults(fn=cmd_rendezvous)
     a = p.parse_args(argv)
     logging.basicConfig(level=logging.INFO if a.verbose else logging.WARNING,
                         format="%(asctime)s %(name)s %(levelname)s %(message)s")

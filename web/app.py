@@ -36,7 +36,7 @@ def status():
 
 @app.get("/")
 def index():
-    return FileResponse(os.path.join(HERE, "static", "index.html"))
+    return FileResponse(os.path.join(HERE, "static", "dashboard", "index.html"))
 
 
-app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")), name="static")
+app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static", "dashboard")), name="static")

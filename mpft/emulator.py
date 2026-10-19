@@ -7,6 +7,7 @@ import socket
 import threading
 import time
 
+from . import events as ev
 from .protocol import parse_addr, tune
 
 log = logging.getLogger("mpft.emulator")
@@ -83,6 +84,7 @@ class PathProxy:
 
     def kill(self):
         log.warning("path on port %s dropped", self.cfg["listen_port"])
+        ev.emit("emulator_path_killed", port=self.cfg["listen_port"])
         self.dead = True
         self.stop()
 
@@ -103,6 +105,16 @@ class EmulatorHandle:
     def __init__(self, paths):
         self.paths = paths
 
+    def state(self):
+        return [{"path": i, **p.cfg, "dead": p.dead} for i, p in enumerate(self.paths)]
+
+    def kill(self, i):
+        self.paths[i].kill()
+
+    def set_corrupt(self, rate):
+        for p in self.paths:
+            p.cfg["corrupt_rate"] = rate  # read per block, so it applies immediately
+
     def stop(self):
         for p in self.paths:
             p.stop()
@@ -113,10 +125,14 @@ def start_emulator(config):
     return EmulatorHandle([PathProxy(c) for c in config])
 
 
-def run_emulator(config_path):
+def run_emulator(config_path, control_port=None):
     with open(config_path) as f:
         config = json.load(f)
     handle = start_emulator(config)
+    if control_port:
+        from .emu_control import start_control
+        start_control(handle, control_port)
+        print(f"control: http://127.0.0.1:{control_port}/state", flush=True)
     for c in config:
         print(f"path :{c['listen_port']} -> {c['to']} delay={c.get('delay_ms', 0)}ms "
               f"jitter={c.get('jitter_ms', 0)}ms rate={c.get('rate_mbit', 0) or 'unlimited'}Mbit "
