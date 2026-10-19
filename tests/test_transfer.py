@@ -3,7 +3,8 @@ import socket
 
 from conftest import make_file
 from mpft import protocol as P
-from mpft.sender import build_manifest, run_transfer
+from mpft.protocol import build_manifest
+from mpft.sender import run_transfer
 
 
 def sha(path):

@@ -1,34 +1,21 @@
 """Sender: one worker thread per path pulls chunk indexes from a shared queue (work stealing)."""
-import hashlib
 import json
 import logging
 import os
 import queue
 import random
 import socket
-import statistics
 import threading
 import time
 
 from .protocol import (ACK, CHUNK, DONE, ERROR, HELLO, MANIFEST, MANIFEST_ACK, NACK, ProtocolError,
-                       chunk_len, parse_addr, recv_msg, send_json, send_msg, sha256_hex, tune)
+                       build_manifest, chunk_len, parse_addr, recv_msg, send_json, send_msg, tune)
+from .metrics import build_result
 from .status import StatusWriter
 
 log = logging.getLogger("mpft.sender")
 MAX_RETRIES = 5
 MAX_PATH_FAILS = 6
-
-
-def build_manifest(file_path, chunk_size):
-    """One streaming pass: per-chunk hashes and whole-file hash, never the whole file in RAM."""
-    size = os.path.getsize(file_path)
-    whole, chunks = hashlib.sha256(), []
-    with open(file_path, "rb") as f:
-        while data := f.read(chunk_size):
-            whole.update(data)
-            chunks.append(sha256_hex(data))
-    return {"name": os.path.basename(file_path), "size": size, "chunk_size": chunk_size,
-            "total_chunks": len(chunks), "file_sha256": whole.hexdigest(), "chunk_sha256": chunks}
 
 
 class Sender:
@@ -221,14 +208,7 @@ class Sender:
         for s in self.socks.values():
             s.close()
         os.close(self.fd)
-        sent = sum(self.path_bytes.values())
-        return {"total_time_s": elapsed, "goodput_mbit": sent * 8 / 1e6 / elapsed if elapsed else 0.0,
-                "bytes_per_path": dict(self.path_bytes), "retransmitted_chunks": self.retransmits,
-                "rtt_mean_ms": statistics.fmean(self.rtts) if self.rtts else 0.0,
-                "rtt_jitter_ms": statistics.stdev(self.rtts) if len(self.rtts) > 1 else 0.0,
-                "recovery_time_s": self.recovery if self.recovery is not None else 0.0,
-                "success": ok, "error": self.error, "resumed_chunks": self.resumed,
-                "fail_time_s": self.t_fail, "events": self.events}
+        return build_result(self, elapsed, ok)
 
 
 def run_transfer(file_path, targets, chunk_size=1048576, corrupt_rate=0.0, bind=None, chunk_timeout=5.0):

@@ -1,6 +1,7 @@
 """MPFT wire format: 20-byte header + payload. See docs/PROTOCOL.md."""
 import hashlib
 import json
+import os
 import socket
 import struct
 import zlib
@@ -75,6 +76,18 @@ def chunk_len(size, chunk_size, index):
 
 def sha256_hex(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def build_manifest(file_path, chunk_size):
+    """One streaming pass: per-chunk hashes and whole-file hash, never the whole file in RAM."""
+    size = os.path.getsize(file_path)
+    whole, chunks = hashlib.sha256(), []
+    with open(file_path, "rb") as f:
+        while data := f.read(chunk_size):
+            whole.update(data)
+            chunks.append(sha256_hex(data))
+    return {"name": os.path.basename(file_path), "size": size, "chunk_size": chunk_size,
+            "total_chunks": len(chunks), "file_sha256": whole.hexdigest(), "chunk_sha256": chunks}
 
 
 def tune(sock):
