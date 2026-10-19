@@ -1,0 +1,6 @@
+pytest
+matplotlib
+fastapi
+uvicorn
+markdown
+httpx

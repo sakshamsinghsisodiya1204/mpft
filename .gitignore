@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+downloads/
+*.part
+*.pcap
+*.pcapng
+.DS_Store
+testdata/
+status/
