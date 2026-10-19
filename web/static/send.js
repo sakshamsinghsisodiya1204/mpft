@@ -19,6 +19,8 @@ MP.views.send = function (root) {
   const profile = MP.h("select", { id: "profile" });
   info.then((i) => i.profiles.forEach((p) => profile.append(MP.h("option", { value: p },
     { none: "None", asymmetric: "Asymmetric", lossy: "Lossy", path_failure: "Path failure mid-transfer" }[p]))));
+  const addr = MP.h("select", { id: "addr" }, [["auto", "Automatic (all addresses in the ID)"], ["tailscale", "Tailscale only"], ["lan", "LAN only"]]
+    .map(([v, t]) => MP.h("option", { value: v }, t)));
   const msg = MP.h("p", { role: "alert", class: "err" });
   const prog = MP.h("progress", { max: 100, value: 0, hidden: true });
   const btn = MP.h("button", { type: "submit", class: "primary" }, "Send");
@@ -31,6 +33,7 @@ MP.views.send = function (root) {
     MP.h("details", {}, MP.h("summary", {}, "Advanced"),
       MP.h("label", { for: "paths" }, "Paths (1 to 8)"), paths,
       MP.h("label", { for: "chunk" }, "Chunk size"), chunk,
+      MP.h("label", { for: "addr" }, "Receiver address"), addr,
       MP.h("label", { for: "profile" }, "Network conditions"), profile),
     MP.h("p", {}, btn), prog, msg);
   form.addEventListener("change", hint);
@@ -44,7 +47,7 @@ MP.views.send = function (root) {
     try {
       const up = await MP.upload(file, (p) => (prog.value = p));
       const r = await MP.post("/api/send", { upload_id: up.upload_id, kind: form.kind.value, value: target.value.trim(),
-        paths: +paths.value, chunk_size: +chunk.value, profile: profile.value });
+        paths: +paths.value, chunk_size: +chunk.value, profile: profile.value, addr_mode: addr.value });
       location.hash = "#/transfer/" + r.session;
     } catch (err) { msg.textContent = err.message; }
     busy = false; btn.disabled = false; prog.hidden = true;
