@@ -23,3 +23,5 @@
 - Not yet checked by eye: live (mid-transfer) animation, chunk-map hover tooltip, phone width.
 - W5 done: network profiles (none/asymmetric/lossy/path_failure) in web/netprofiles.py; API + panel for Kill path and Set corruption (percent of chunks, converted to the emulator's per-16KiB-block rate); History view with CSV export; About view.
 - wireshark/mpft.lua gained a heuristic TCP dissector (header "MP", ver 1, type 1-8) so ephemeral web-UI ports decode with no Decode As; verified with tshark on a real loopback capture. Re-copy mpft.lua into the Wireshark plugin folder.
+- W6 done: docs/WEB.md (architecture, offer sequence diagram, one-Mac and Tailscale runs, troubleshooting), README web section, DEMO_SCRIPT web flow, VIVA_PREP Q26-33, WALKTHROUGH new files, PDFs regenerated. Real runs: 40-100 MB alice->bob via ID and code, path killed live from the browser, path_failure profile (hash matched), phone width has no horizontal scroll.
+- Known: test_emulator corruption test is flaky on main too (about 1 in 8 full runs). Not checked by eye: drag-and-drop, chunk-map hover tooltip, Copy buttons, two-Mac Tailscale run.

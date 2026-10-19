@@ -74,3 +74,29 @@ Sender and receiver write `status/<role>-<session>.json` atomically (temp file p
 
 **25. What would you improve?**
 A sliding window per path (several chunks in flight), TLS or a keyed MAC, adaptive chunk size, true packet-loss emulation, and resume metadata that survives a sender restart without re-hashing the receiver's file.
+
+## Web layer
+
+**26. Why two servers per instance?**
+The UI server can start transfers, read local files' uploads and kill emulator paths, so it listens on 127.0.0.1 and checks Host and Origin. The peer server must be reachable by other machines, so it is a separate app on 0.0.0.0 that exposes only `GET /health` and `POST /offer`.
+
+**27. How does a Receiver ID work without a server?**
+It is base32 of `host:peer_port`, so the sender decodes it locally. The host is the Tailscale 100.x address if present. A code needs the rendezvous service because six random characters cannot encode an address.
+
+**28. What makes a code safe to use?**
+It is generated with `secrets`, has no confusable letters, expires in 10 minutes, is deleted on first use, and failed attempts are limited to five per minute per client. It does not provide encryption.
+
+**29. Why does an offer need Accept?**
+Anyone who can reach the peer port could otherwise push files to the receiver. A valid code proves the sender was given the code by the receiver, so that offer is trusted; an ID alone is not a secret.
+
+**30. How do the live panels get real data?**
+`mpft/events.py` is a thread-safe bus that sender, receiver and emulator emit into. The UI server subscribes, stores events in a ring buffer and streams them over Server-Sent Events; the page reduces them into state (`MP.reduce`) and redraws. A reload replays the buffer.
+
+**31. How does Kill path work, and is it a real failure?**
+The emulator proxies are real TCP listeners in front of the receiver. Killing one closes its sockets, so the sender sees a reset or timeout exactly as in the earlier experiments, requeues the chunk and the other paths finish it. The failure is real TCP, only the network is emulated.
+
+**32. How do you avoid overwriting or traversal on the receiver?**
+Offer names are reduced to a safe base name; data arrives in a staging directory and is renamed to a unique name (`name (1).ext`) under a lock. Downloads are served only for names the node recorded, and the resolved path must be inside the output directory.
+
+**33. What does the web layer not protect against?**
+There is no encryption or authentication on the peer API or rendezvous service; anyone on the network who knows the receiver address can send an offer (it waits for Accept) and a rogue rendezvous could map a code to the wrong ID. Tailscale limits who is on the network and encrypts it.

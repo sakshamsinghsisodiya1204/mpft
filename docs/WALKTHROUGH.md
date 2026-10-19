@@ -50,6 +50,18 @@ Questions: What does `--to` with one address and `--paths 4` do? How would you a
 `app.py`: `/api/status` reads status files, marks stale. `static/app.js` polls and renders with `textContent` (no HTML injection). `style.css`: the plain theme.
 Questions: Why mark files stale? Why `textContent` instead of `innerHTML`?
 
+## mpft/events.py (about 50 lines) and the hooks
+A subscriber list and `emit()`; with no subscriber it returns at once. `message()` samples CHUNK and ACK (first 5, then every 16th) so the trace stays readable. Sender, receiver and emulator call `ev.emit(...)` at the points where state changes; the status JSON contract is untouched.
+Questions: Why is the bus global? Why must a subscriber never raise into the transfer?
+
+## mpft/emu_control.py (about 40 lines)
+`--control-port` HTTP control on 127.0.0.1: `/state`, `/kill/N`, `/corrupt/RATE`, backed by `EmulatorHandle.kill/set_corrupt`.
+
+## web/ (web interface)
+`ids.py` Receiver ID encode/decode and host detection. `codes.py` code alphabet, expiry, rate limiter. `rendezvous.py` code lookup service. `node.py` offers, accept, staging and unique names. `peer.py` the only public API. `sendjob.py` sender side. `netprofiles.py` emulator profiles. `feed.py` ring buffer behind SSE. `ui.py` local API, upload, download, Host/Origin guard. `main.py` and `serve.py` start the two servers.
+`static/`: `app.js` router, `store.js` the one EventSource, `send.js`, `receive.js`, `transfer.js` (reducer) and `panels.js`, `history.js`, `about.js`.
+Questions: Why is the peer API separate from the UI server? How does a reload replay a transfer? Why `os.rename` under a lock for the final name?
+
 ## experiments/
 `run_experiments.py`: runs receiver and emulator in-process, one function per experiment, writes `results/*.csv` (resume uses a subprocess that is killed with SIGKILL). `plot_results.py`: matplotlib PNGs.
 Questions: How is the resume experiment interrupted? Why one run per setting is weak evidence?

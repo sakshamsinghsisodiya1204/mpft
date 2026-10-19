@@ -53,7 +53,17 @@ Wireshark (about 30 s): filter `mpft.type == 2` (decoded MANIFEST JSON), `mpft.t
 Results (about 30 s): open `results/throughput_vs_paths.png` (goodput doubles with paths) and
 `results/recovery_timeline.png` (one path stops, others carry on, recovery 0.15 s).
 
+## Web UI demo (about 4 minutes, one Mac)
+1. Start rendezvous, alice (8000/8001) and bob (8010/8011) as in [WEB.md](WEB.md); open bob's Receive page in tab 1, alice's Send page in tab 2.
+2. Alice: choose a 100 MB file, paste bob's ID, Advanced > Network conditions = Asymmetric, Send. Bob: press Accept (point out that a code would skip this click).
+3. Alice's Transfer page: chunk map filling, four paths at different Mbit/s, chart with one line per path.
+4. While it runs, press Kill path 1 under Network conditions. Show the event log (path down, chunks requeued) and that the other paths finish the file.
+5. Set corruption to 5 %: show "chunk N hash mismatch, retransmitting" and the Chunks failed counter.
+6. Show Verification: expected and computed SHA-256 equal, "Hash verified". On bob's Receive page, Download the file and run `shasum -a 256`.
+7. Copy the tcpdump command from the Wireshark panel for the next run, then filter `mpft.type == 4`.
+
 ## Rehearsal checklist
 - [ ] Time each section with a stopwatch; cut the corruption run first if over time
 - [ ] Ports 9000, 9201-9203, 8080 are free (`lsof -i :9201`)
+- [ ] Web demo: ports 8000, 8001, 8010, 8011, 9100 free; latest `wireshark/mpft.lua` copied into Wireshark
 - [ ] Backup: screenshots of dashboard and Wireshark if the live demo fails
