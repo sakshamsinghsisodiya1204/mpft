@@ -19,7 +19,8 @@ class Session:
         self.id, self.m = session_id, manifest
         self.total, self.size, self.cs = manifest["total_chunks"], manifest["size"], manifest["chunk_size"]
         os.makedirs(out_dir, exist_ok=True)
-        self.final = os.path.join(out_dir, os.path.basename(manifest["name"]))  # basename: no path traversal
+        name = os.path.basename(manifest["name"])  # basename: no path traversal
+        self.final = os.path.join(out_dir, name if name not in ("", ".", "..") else "file")
         self.part = self.final + ".part"
         fresh = not os.path.exists(self.part)
         self.fd = os.open(self.part, os.O_RDWR | os.O_CREAT)
