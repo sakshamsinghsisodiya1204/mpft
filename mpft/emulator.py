@@ -22,7 +22,7 @@ class PathProxy:
         self.srv.bind((cfg.get("listen_host", "127.0.0.1"), cfg["listen_port"]))
         self.srv.listen(32)
         self.conns, self.lock, self.dead = [], threading.Lock(), False
-        self.timer_started = False
+        self.timer = None
         threading.Thread(target=self._accept_loop, daemon=True).start()
 
     def _accept_loop(self):
@@ -31,11 +31,10 @@ class PathProxy:
                 client, _ = self.srv.accept()
             except OSError:
                 return
-            if self.cfg.get("drop_after_s") and not self.timer_started:
-                self.timer_started = True  # the clock starts at the first connection
-                t = threading.Timer(self.cfg["drop_after_s"], self.kill)
-                t.daemon = True
-                t.start()
+            if self.cfg.get("drop_after_s") and self.timer is None:
+                self.timer = threading.Timer(self.cfg["drop_after_s"], self.kill)  # clock starts at first connection
+                self.timer.daemon = True
+                self.timer.start()
             try:
                 upstream = socket.create_connection(self.target, timeout=3)
             except OSError:
@@ -88,6 +87,8 @@ class PathProxy:
         self.stop()
 
     def stop(self):
+        if self.timer:
+            self.timer.cancel()
         self.srv.close()
         with self.lock:
             for c in self.conns:
@@ -119,7 +120,7 @@ def run_emulator(config_path):
     for c in config:
         print(f"path :{c['listen_port']} -> {c['to']} delay={c.get('delay_ms', 0)}ms "
               f"jitter={c.get('jitter_ms', 0)}ms rate={c.get('rate_mbit', 0) or 'unlimited'}Mbit "
-              f"drop_after={c.get('drop_after_s', 'never')}s corrupt={c.get('corrupt_rate', 0)}")
+              f"drop_after={c.get('drop_after_s', 'never')}s corrupt={c.get('corrupt_rate', 0)}", flush=True)
     try:
         while True:
             time.sleep(1)

@@ -38,7 +38,7 @@ class Sender:
         self.m = build_manifest(file_path, chunk_size)
         self.cs, self.sid = chunk_size, random.getrandbits(32)
         self.fd = os.open(file_path, os.O_RDONLY)
-        self.q = queue.Queue()
+        self.q = queue.PriorityQueue()  # (0, idx) retries jump ahead of fresh (1, idx) work
         self.lock, self.manifest_lock = threading.Lock(), threading.Lock()
         self.ready, self.stop = threading.Event(), threading.Event()  # stop: finished or failed
         self.acked, self.attempts, self.retransmits = set(), {}, 0
@@ -78,7 +78,7 @@ class Sender:
             todo = [i for i in range(self.m["total_chunks"]) if i not in held]
             self.to_send = len(todo)
             for i in todo:
-                self.q.put(i)
+                self.q.put((1, i))
             if not todo:
                 self.stop.set()
             self.ready.set()
@@ -102,7 +102,7 @@ class Sender:
                     sock = None
                     continue
             try:
-                idx = self.q.get(timeout=0.1)
+                _, idx = self.q.get(timeout=0.1)
             except queue.Empty:
                 continue
             if self.send_chunk(sock, pid, idx):
@@ -171,7 +171,7 @@ class Sender:
             self.error = f"chunk {idx} failed {MAX_RETRIES} retries"
             self.stop.set()
             return
-        timer = threading.Timer(min(0.05 * 2 ** (n - 1), 1.0), self.q.put, (idx,))
+        timer = threading.Timer(min(0.05 * 2 ** (n - 1), 1.0), self.q.put, ((0, idx),))
         timer.daemon = True
         timer.start()
 
