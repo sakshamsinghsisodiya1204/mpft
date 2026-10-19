@@ -195,7 +195,7 @@ class Sender:
 
     def snapshot(self):
         with self.lock:
-            return {"file_name": self.m["name"], "file_size": self.m["size"],
+            return {"file_name": self.m["name"], "file_size": self.m["size"], "file_sha256": self.m["file_sha256"],
                     "total_chunks": self.m["total_chunks"], "chunks_done": self.resumed + len(self.acked),
                     "retransmissions": self.retransmits,
                     "hash_status": "verified" if self.done else "pending",

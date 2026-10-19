@@ -58,7 +58,8 @@ class Session:
 
     def snapshot(self):
         with self.lock:
-            return {"file_name": self.m["name"], "file_size": self.size, "total_chunks": self.total,
+            return {"file_name": self.m["name"], "file_size": self.size, "file_sha256": self.m["file_sha256"],
+                    "total_chunks": self.total,
                     "chunks_done": len(self.held), "retransmissions": self.duplicates + self.nacks,
                     "hash_status": self.hash_status,
                     "per_path": [{"path_id": p, "bytes": b, "state": "up"}
