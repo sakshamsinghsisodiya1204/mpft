@@ -29,10 +29,8 @@ If you missed it: System Settings > Network > Firewall > Options, allow Python.
 ```bash
 python -m mpft send bigfile.bin --to 100.x.y.z:9000 --paths 4
 ```
-`--paths 4` opens 4 TCP connections to the same address. For genuinely different routes, use two
-interfaces and `--bind`: for example connect the sender to WiFi and a phone hotspot, then
-`--to 100.x.y.z:9000,100.x.y.z:9000 --bind <wifi-ip>` is one path; run with the other bind for the second
-(see limitations below: `--bind` applies to all paths of one command).
+`--paths 4` opens 4 TCP connections to the same address (they share one physical route; see notes).
+`--bind <local-ip>` forces the source interface of outgoing connections if you need it.
 
 ## 4. Fallback: phone hotspot
 If Tailscale is blocked, put both Macs on one phone's Personal Hotspot and use LAN addresses:
