@@ -28,5 +28,5 @@ Token-efficient: small edits, `pytest -q | tail`, no file dumps, 1-2 line report
 Run: .venv/bin/python -m mpft ...; tests: .venv/bin/pytest -q
 
 ## Web layer (branch web-ui, merged)
-`python -m mpft web --name N --ui-port 8000 --peer-port 8001 --data-port 9000 --out ./downloads`. UI server 127.0.0.1 only; peer server 0.0.0.0 with GET /health, GET /addresses, POST /offer, POST /events/{sid}. web/node.py is the event hub (tags side+sseq, logs to .mpft-state/NAME/sessions/<sid>.jsonl, fans out to SSE). Sender relays events via web/relay.py. Docs: docs/WEB.md. UI screenshots: scripts/ui_shots.py -> docs/screenshots/.
+`python -m mpft web --name N --ui-port 8000 --peer-port 8001 --data-port 9000 --out ./downloads`. UI server 127.0.0.1 only; peer server 0.0.0.0 with GET /health, GET /addresses, POST /offer, POST /events/{sid}. web/node.py is the event hub (tags side+sseq, logs to .mpft-state/NAME/sessions/<sid>.jsonl, fans out to SSE). Sender relays events via web/relay.py. Docs: docs/WEB.md. UI tests + screenshots: tests/e2e (Playwright; `MPFT_SHOTS=1` writes docs/screenshots/). CSS: web/static/{tokens,layout,components}.css.
 

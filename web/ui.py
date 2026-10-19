@@ -137,7 +137,8 @@ def make_ui_app(node, ui_port=8000):
             raise HTTPException(404, "Unknown session.")
         port = (offer.get("reply") or {}).get("port")
         return {"role": "receiver", "me": node.name, "sender": offer["sender"], "peer": offer["client"],
-                "capture_ports": [port] if port else [], "loopback": offer["client"] in ("127.0.0.1", "::1")}
+                "capture_ports": [port] if port else [], "loopback": offer["client"] in ("127.0.0.1", "::1"),
+                "file": next((x for x in node.index.items if x["session"] == sid), None)}
 
     @app.get("/api/session/{sid}/events")
     def session_events(sid: int, download: int = 0):
@@ -212,26 +213,22 @@ def make_ui_app(node, ui_port=8000):
             raise HTTPException(409, str(e.args[0]))
         return {"ok": True}
 
-    @app.get("/api/received")
-    def received():
-        return node.received
+    @app.get("/api/files")
+    def files():
+        return node.index.items
 
-    @app.delete("/api/received/{name}")
-    def delete_received(name: str):
-        path = node.download_path(name)
-        real = os.path.realpath(path) if path else None
-        if not real or not real.startswith(node.out_dir + os.sep):
+    @app.get("/api/files/{file_id}/download")
+    def download(file_id: str):
+        entry, path = node.index.downloadable(file_id)
+        if not path:
+            raise HTTPException(404, "File not found, or it was never verified.")
+        return FileResponse(path, filename=entry["name"])  # Content-Disposition: attachment; Range handled by Starlette
+
+    @app.delete("/api/files/{file_id}")
+    def delete_file(file_id: str):
+        if not node.index.remove(file_id):
             raise HTTPException(404, "File not found.")
-        node.forget_received(name)
         return {"ok": True}
-
-    @app.get("/download/{name}")
-    def download(name: str):
-        path = node.download_path(name)
-        real = os.path.realpath(path) if path else None
-        if not real or not real.startswith(node.out_dir + os.sep) or not os.path.isfile(real):
-            raise HTTPException(404, "File not found.")
-        return FileResponse(real, filename=name)
 
     def enriched():
         """History rows plus paths/incidents counted from the session log (the receiver's row is written before the sender's last events arrive)."""

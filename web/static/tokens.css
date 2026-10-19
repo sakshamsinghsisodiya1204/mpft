@@ -1,0 +1,30 @@
+/* Design tokens. Everything visual reads these variables; light is the default, dark follows the OS or the toggle. */
+:root {
+  --bg: #f3f2ee; --surface: #fbfaf8; --surface-2: #efede8; --border: #dad7ce; --border-strong: #bcb8ac;
+  --text: #1c1b19; --text-2: #55534c; --accent: #1b5e6b; --accent-hover: #154a55; --on-accent: #ffffff; --accent-soft: #e0edef;
+  --ok: #1f6f3d; --ok-soft: #e2f0e6; --warn: #85560a; --warn-soft: #f6ead2; --err: #a3261f; --err-soft: #f7e1de;
+  --grid: #e6e3db; --focus: #1b5e6b;
+  --p0: #1b5e6b; --p1: #a35a14; --p2: #3b5ba5; --p3: #8a3f7a; --p4: #4f7a22; --p5: #5c5a53; --p6: #b0392e; --p7: #2b7fa6;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --radius: 6px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141412; --surface: #1b1b19; --surface-2: #232321; --border: #33332f; --border-strong: #4a4943;
+    --text: #ebeae5; --text-2: #a5a39a; --accent: #62b4bf; --accent-hover: #7cc4ce; --on-accent: #0c1a1c; --accent-soft: #1c2f32;
+    --ok: #66c28a; --ok-soft: #1b2e22; --warn: #dcaa4a; --warn-soft: #33290f; --err: #f08178; --err-soft: #3a1f1c;
+    --grid: #2a2a27; --focus: #62b4bf;
+    --p0: #62b4bf; --p1: #e0975a; --p2: #8aa6e8; --p3: #d08cc2; --p4: #9cc46a; --p5: #a5a39a; --p6: #ef8a7e; --p7: #6bbbe0;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141412; --surface: #1b1b19; --surface-2: #232321; --border: #33332f; --border-strong: #4a4943;
+  --text: #ebeae5; --text-2: #a5a39a; --accent: #62b4bf; --accent-hover: #7cc4ce; --on-accent: #0c1a1c; --accent-soft: #1c2f32;
+  --ok: #66c28a; --ok-soft: #1b2e22; --warn: #dcaa4a; --warn-soft: #33290f; --err: #f08178; --err-soft: #3a1f1c;
+  --grid: #2a2a27; --focus: #62b4bf;
+  --p0: #62b4bf; --p1: #e0975a; --p2: #8aa6e8; --p3: #d08cc2; --p4: #9cc46a; --p5: #a5a39a; --p6: #ef8a7e; --p7: #6bbbe0;
+  color-scheme: dark;
+}

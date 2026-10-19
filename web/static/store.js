@@ -15,5 +15,7 @@ MP.connect = function () {
     if (MP.events.all.length > 2000) MP.events.all.splice(0, 500);
     for (const fn of MP.events.listeners.slice()) fn(e);
   };
-  es.onerror = () => { /* EventSource reconnects by itself and resends Last-Event-ID */ };
+  const conn = (ok) => { const c = document.getElementById("conn"); if (c) { c.className = "badge " + (ok ? "ok" : "warn"); c.textContent = ok ? "Connected" : "Reconnecting"; } };
+  es.onopen = () => conn(true);
+  es.onerror = () => conn(false); // EventSource reconnects by itself and resends Last-Event-ID
 };

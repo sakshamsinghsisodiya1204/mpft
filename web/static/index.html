@@ -4,21 +4,34 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MPFT</title>
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/tokens.css">
+<link rel="stylesheet" href="/static/layout.css">
+<link rel="stylesheet" href="/static/components.css">
 </head>
 <body>
-<header>
-  <strong id="whoami">MPFT</strong>
-  <nav aria-label="Main">
-    <a href="#/send">Send</a>
-    <a href="#/receive">Receive</a>
-    <a href="#/transfer" id="nav-transfer">Transfer</a>
-    <a href="#/history">History</a>
-    <a href="#/about">About</a>
-    <a href="#/settings">Settings</a>
-  </nav>
-</header>
-<main id="view" tabindex="-1"></main>
+<a class="skip" href="#view">Skip to content</a>
+<div class="shell">
+  <aside class="sidebar" aria-label="Sidebar">
+    <div class="brand"><b id="whoami">MPFT</b><span>multipath file transfer</span></div>
+    <nav aria-label="Main">
+    <a href="#/send"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8l10-5-4 10-2-4-4-1z"/></svg>Send</a>
+    <a href="#/receive"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8m-3-3l3 3 3-3M3 13h10"/></svg>Receive</a>
+    <a href="#/transfer" id="nav-transfer"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 5h10m-3-3l3 3-3 3M14 11H4m3-3l-3 3 3 3"/></svg>Transfer</a>
+    <a href="#/history"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></svg>History</a>
+    <a href="#/about"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 7.5V11M8 5v.5"/></svg>About</a>
+    <a href="#/settings"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h10"/><circle cx="6" cy="4" r="1.3"/><circle cx="10" cy="8" r="1.3"/><circle cx="5" cy="12" r="1.3"/></svg>Settings</a>
+    </nav>
+    <div class="side-foot">
+      <div class="row-between"><span class="badge ok" id="conn" role="status">Connected</span>
+        <button type="button" class="small" id="theme-toggle" aria-label="Switch colour theme">Theme</button></div>
+      <span class="muted">My ID</span><span id="my-id-short" title="">...</span>
+    </div>
+  </aside>
+  <div class="main-col">
+    <header class="topbar"><h1 id="page-title">Send</h1><span id="top-state" role="status"></span></header>
+    <main id="view" tabindex="-1"></main>
+  </div>
+</div>
 <script src="/static/util.js"></script>
 <script src="/static/store.js"></script>
 <script src="/static/send.js"></script>
