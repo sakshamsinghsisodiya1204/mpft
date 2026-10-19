@@ -1,7 +1,6 @@
 # Capturing MPFT in Wireshark (macOS)
 
-Not run by the author of this file's tooling: the dissector passes a Lua syntax check only. Verify it in Wireshark
-and fix any issue before the demo.
+Dissector verified in Wireshark 4.6.9 on macOS (HELLO, MANIFEST, MANIFEST_ACK, CHUNK, ACK, DONE decode correctly).
 
 ## 1. Install
 ```bash

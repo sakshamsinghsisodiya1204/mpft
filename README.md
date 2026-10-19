@@ -99,7 +99,7 @@ Capture instructions and screenshot checklist: [wireshark/CAPTURE.md](wireshark/
 - No encryption or authentication by default (use Tailscale/VPN).
 - One chunk in flight per path (stop-and-wait), so a single path under-uses its link.
 - Experiments ran once per setting, without confidence intervals.
-- Wireshark dissector is syntax-checked only and the Tailscale run is untested here; both need a manual check.
+- The two-Mac Tailscale run has not been tested on real hardware.
 
 ## Team contributions
 See [docs/CONTRIBUTIONS.md](docs/CONTRIBUTIONS.md).

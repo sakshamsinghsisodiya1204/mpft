@@ -120,7 +120,7 @@ def run_emulator(config_path):
     for c in config:
         print(f"path :{c['listen_port']} -> {c['to']} delay={c.get('delay_ms', 0)}ms "
               f"jitter={c.get('jitter_ms', 0)}ms rate={c.get('rate_mbit', 0) or 'unlimited'}Mbit "
-              f"drop_after={c.get('drop_after_s', 'never')}s corrupt={c.get('corrupt_rate', 0)}", flush=True)
+              f"drop_after={str(c['drop_after_s']) + 's' if c.get('drop_after_s') else 'never'} corrupt={c.get('corrupt_rate', 0)}", flush=True)
     try:
         while True:
             time.sleep(1)
