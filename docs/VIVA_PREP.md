@@ -100,3 +100,34 @@ Offer names are reduced to a safe base name; data arrives in a staging directory
 
 **33. What does the web layer not protect against?**
 There is no encryption or authentication on the peer API or rendezvous service; anyone on the network who knows the receiver address can send an offer (it waits for Accept) and a rogue rendezvous could map a code to the wrong ID. Tailscale limits who is on the network and encrypts it.
+
+**34. Why does the sender relay its events instead of the receiver pulling them?**
+The sender can reach the receiver (it just made the offer) but the receiver may not reach the sender behind NAT. The sender POSTs batches to `/events/{id}` and the reply carries the receiver's new events, so one connection direction gives both people the same log.
+
+**35. How do you merge two machines' clocks?**
+During the offer round trip the sender takes t0 and t3, the receiver reports its arrival t1 and reply t2; offset = ((t1-t0)+(t2-t3))/2. The receiver's wait for Accept cancels out. Events keep a per-side sequence number, so order is by corrected time, then side, then sequence; clock error can blur ordering across sides by roughly the network delay but never within a side.
+
+**36. What is the session token for?**
+It is returned only in the accept reply and required on `/events`, so a stranger who finds the peer port cannot inject events into someone's dashboard. It is compared in constant time and events are forced to the side the token holder may speak for.
+
+**37. How does one Receiver ID work over two networks?**
+It encodes all of the receiver's addresses (Tailscale and LAN). The sender probes each, uses the reachable ones, and assigns paths round-robin, so a transfer can use both networks at once. Advanced lets you force one.
+
+**38. What happens if the receiver disappears mid-transfer?**
+Paths fail, chunks are requeued up to the retry limit, the job fails with a message to send again. The receiver keeps the `.part` file in a staging folder named by the file hash, and the next offer of the same file resumes from the chunks whose hashes match.
+
+**39. How is the incident table built?**
+A reducer watches the merged events: `path_down` opens an incident, `requeue` events attach chunks to it, `backoff` adds retry delays, and when every attached chunk is acknowledged on another path the incident is recovered; recovery time and the paths that absorbed the work come from those events.
+
+**40. Why are path ids not merged between sender and receiver?**
+The receiver numbers every accepted connection, so a reconnect gets a new id, while the sender keeps its own. The dashboard therefore uses only the sender's path events for the Paths table and counts a chunk as done when the sender sees the ACK.
+
+**41. How does the chunk map scale to 20,000 chunks?**
+It is a canvas, not DOM elements; above 6000 chunks several chunks share one cell and the cell shows the group's state. Hover and click report exact values for single chunks.
+
+**42. How does Replay work?**
+Both sides write every tagged event to `sessions/<id>.jsonl`. Replay loads that file and feeds events to the same reducer used live, up to a virtual clock; scrubbing backwards resets and re-reduces. There is no separate replay code path to drift from the live view.
+
+**43. What would you do for real security?**
+Encrypt and authenticate the data plane (TLS or Noise) and the peer API, bind the session token to a key exchange, and replace code lookup by a verified rendezvous. Today Tailscale supplies encryption and device authentication.
+

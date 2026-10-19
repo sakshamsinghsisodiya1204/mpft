@@ -40,9 +40,10 @@ MP.views.receive = function (root) {
   };
   const drawFiles = async () => {
     const list = await MP.api("/api/received");
-    files.replaceChildren(list.length ? MP.table(["Name", "Size", "SHA-256", "Received", ""],
-      list.slice().reverse().map((f) => [f.name, MP.bytes(f.size), MP.h("span", { class: "hash mono" }, f.sha256), MP.when(f.time),
-        MP.h("a", { href: "/download/" + encodeURIComponent(f.name), download: f.name }, "Download")]), [1])
+    files.replaceChildren(list.length ? MP.table(["Name", "Size", "SHA-256", "Received", "Verified", ""],
+      list.slice().reverse().map((f) => [f.name, MP.bytes(f.size), MP.h("span", { class: "hash mono" }, f.sha256), MP.when(f.time), f.verified ? "yes" : "no",
+        MP.h("span", { class: "row" }, MP.h("a", { href: "/download/" + encodeURIComponent(f.name), download: f.name }, "Download"),
+          MP.h("button", { type: "button", class: "danger", onclick: async () => { if (confirm("Delete " + f.name + " from this Mac?")) { await MP.api("/api/received/" + encodeURIComponent(f.name), { method: "DELETE" }).catch((e) => (err.textContent = e.message)); drawFiles(); } } }, "Delete"))]), [1])
       : MP.h("p", { class: "muted" }, "No files received yet."));
   };
   const refresh = () => MP.api("/api/info").then(showInfo).catch((e) => (err.textContent = e.message));

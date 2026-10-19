@@ -60,3 +60,28 @@ def test_feed_replays_session_events(tmp_path):
     assert {"send_state", "session_started", "chunk_state", "session_done", "message"} <= kinds
     frame = next(feed.stream(0))
     assert frame.startswith("id: 1\ndata: ")
+
+
+def test_range_download_delete_and_verified_flag(tmp_path):
+    alice, bob, ca, cb = two_uis(tmp_path)
+    data = bytes(range(256)) * 400
+    (tmp_path / "bob" / "r.bin").write_bytes(data)
+    bob.received.append({"name": "r.bin", "size": len(data), "sha256": "0" * 64, "time": 1.0, "sender": "alice", "verified": True})
+    r = cb.get("/download/r.bin", headers={"Range": "bytes=100-199"})
+    assert r.status_code == 206 and r.content == data[100:200]
+    assert cb.get("/api/received").json()[0]["verified"] is True
+    assert cb.delete("/api/received/..%2Fr.bin").status_code in (404, 405)
+    assert cb.delete("/api/received/r.bin").status_code == 200
+    assert not (tmp_path / "bob" / "r.bin").exists() and cb.get("/api/received").json() == []
+
+
+def test_test_connection_reports_reachable_and_specific_failures(tmp_path):
+    from web.ids import encode_id
+    from test_web_flow import free_port
+    alice, bob, ca, cb = two_uis(tmp_path)
+    ok = ca.post("/api/test-connection", json={"kind": "id", "value": bob.id}).json()
+    assert ok["ok"] and ok["results"][0]["name"] == "bob"
+    dead = ca.post("/api/test-connection", json={"kind": "id", "value": encode_id("127.0.0.1", free_port())}).json()
+    assert not dead["ok"] and "refused" in dead["results"][0]["reason"]
+    bad = ca.post("/api/test-connection", json={"kind": "id", "value": "NOPE"}).json()
+    assert not bad["ok"] and "not valid" in bad["error"]

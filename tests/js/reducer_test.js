@@ -57,4 +57,20 @@ mv("receiver", "session_done", { success: true }); mv("sender", "session_done", 
 assert.deepStrictEqual(Object.keys(m.paths), ["0"]); assert.strictEqual(m.done, 2); assert.strictEqual(m.paths[0].bytes, 2 << 20);
 assert.strictEqual(m.role, "sender"); assert.strictEqual(m.verify.result, "verified"); assert.strictEqual(m.phase, "done");
 assert.ok(m.log.some((l) => l.side === "receiver") && m.log.some((l) => l.side === "sender"));
+
+// incident: path 1 dies, its chunk is requeued and absorbed by path 0
+const q = MP.newState(10); t = 4000;
+const qv = (kind, o = {}) => MP.reduce(q, { kind, t: (t += 0.5), session: 10, role: "sender", side: "sender", mine: true, ...o });
+qv("session_started", { file_name: "i", file_size: 2 << 20, file_sha256: "aa", chunk_size: 1 << 20, total_chunks: 2 });
+qv("path_up", { path: 0 }); qv("path_up", { path: 1 });
+qv("chunk_state", { index: 1, state: "inflight", path: 1, attempt: 1 });
+qv("path_down", { path: 1, reason: "timeout" }); qv("requeue", { index: 1, path: 1, attempt: 1, reason: "timeout" });
+qv("chunk_state", { index: 1, state: "retransmitted", path: 1, attempt: 1 });
+qv("chunk_state", { index: 1, state: "inflight", path: 0, attempt: 2 });
+qv("chunk_state", { index: 1, state: "done", path: 0, bytes: 1 << 20, rtt_ms: 3 });
+assert.strictEqual(q.incidents.length, 1); const inc = q.incidents[0];
+assert.ok(inc.recoveredAt > inc.at && inc.absorbed[0] === 1 && inc.requeued === 1);
+assert.ok(q.marks.some((x) => x.label === "path 1 down") && q.marks.some((x) => x.label === "recovered"));
+assert.ok(MP.explain(inc).includes("stopped answering") && MP.explain(inc).includes("path 0 (1) delivered"));
+assert.strictEqual(q.inflight[1], 0);
 console.log("ok");

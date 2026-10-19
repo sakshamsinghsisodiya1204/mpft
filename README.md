@@ -61,14 +61,16 @@ Sender: `python -m mpft send file --to 100.x.y.z:9000 --paths 4`. Setup, firewal
 caveats about college WiFi and CGNAT: [docs/REMOTE.md](docs/REMOTE.md). (Not yet tested on real hardware.)
 
 ## Web interface
+One Mac, two instances and two browser tabs:
 ```bash
-python -m mpft rendezvous --host 127.0.0.1 --port 9100
-python -m mpft web --name alice --ui-port 8000 --peer-port 8001 --out ./alice-dl --host 127.0.0.1 --rendezvous http://127.0.0.1:9100
-python -m mpft web --name bob --ui-port 8010 --peer-port 8011 --out ./bob-dl --host 127.0.0.1 --rendezvous http://127.0.0.1:9100
+python -m mpft web --name alice --ui-port 8000 --peer-port 8001 --data-port 9000 --out ./alice-dl --host 127.0.0.1
+python -m mpft web --name bob   --ui-port 8010 --peer-port 8011 --data-port 9010 --out ./bob-dl   --host 127.0.0.1
 ```
-Open `http://127.0.0.1:8000` (alice, Send) and `http://127.0.0.1:8010` (bob, Receive). Send by Receiver ID (receiver
-clicks Accept) or by one-time code. The Transfer page shows chunks, paths, throughput, hash checks, protocol messages,
-and lets you kill a path live. No built-in encryption; use Tailscale across networks. Details: [docs/WEB.md](docs/WEB.md).
+Two Macs: each person runs `python -m mpft web --name NAME --out ./downloads` (with Tailscale installed) and opens
+`http://127.0.0.1:8000`. The receiver copies the Receiver ID from the Receive page to the sender, who pastes it on the
+Send page. Both people then watch the same live Transfer page: chunk map, paths, graphs, incidents, hash checks and
+protocol messages, and past transfers can be replayed from History. No built-in encryption; Tailscale (WireGuard)
+encrypts between the Macs. Details, runbooks and troubleshooting: [docs/WEB.md](docs/WEB.md).
 
 ## Dashboard
 ```bash

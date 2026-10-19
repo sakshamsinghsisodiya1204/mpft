@@ -82,3 +82,25 @@ def test_emulator_restore_and_delay():
     emu.restore(0)
     assert not p.dead and emu.state()[0]["dead"] is False
     emu.stop()
+
+
+def test_receiver_going_offline_then_resume(tmp_path):
+    import time
+    alice, bob = make_node(tmp_path, "alice"), make_node(tmp_path, "bob")
+    src = make_file(tmp_path / "big.bin", 40 * 1024 * 1024)
+    auto_decide(bob)
+    job = SendJob(alice, src, "id", bob.id, paths=2, chunk_size=256 * 1024, profile="lossy").start()  # slow enough to interrupt
+    end = time.time() + 20
+    while time.time() < end and not any(e["kind"] == "chunk_state" and e["state"] == "done" for e in alice.log.events(job.sid)[-50:]):
+        time.sleep(0.05)
+    time.sleep(1.0)
+    bob.sessions[job.sid]["handle"].stop()  # the receiver goes away mid-transfer
+    assert wait(job, t=60) == "failed" and "Send the same file again" in job.message
+    stage = os.path.join(bob.out_dir, ".incoming")
+    assert any(f.endswith(".part") for _, _, fs in os.walk(stage) for f in fs)  # partial file kept for resume
+    auto_decide(bob)
+    job2 = SendJob(alice, src, "id", bob.id, paths=2, chunk_size=256 * 1024).start()
+    assert wait(job2, t=60) == "done", job2.message
+    held = [e["held"] for e in bob.log.events(job2.sid) if e["kind"] == "manifest_received"]
+    assert held and held[0] > 0  # resumed, not restarted
+    assert open(os.path.join(bob.out_dir, "big.bin"), "rb").read() == open(src, "rb").read()

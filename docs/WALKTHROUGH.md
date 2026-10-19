@@ -59,7 +59,8 @@ Questions: Why is the bus global? Why must a subscriber never raise into the tra
 
 ## web/ (web interface)
 `ids.py` Receiver ID encode/decode and host detection. `codes.py` code alphabet, expiry, rate limiter. `rendezvous.py` code lookup service. `node.py` offers, accept, staging and unique names. `peer.py` the only public API. `sendjob.py` sender side. `netprofiles.py` emulator profiles. `feed.py` ring buffer behind SSE. `ui.py` local API, upload, download, Host/Origin guard. `main.py` and `serve.py` start the two servers.
-`static/`: `app.js` router, `store.js` the one EventSource, `send.js`, `receive.js`, `transfer.js` (reducer) and `panels.js`, `history.js`, `about.js`.
+`sessionlog.py` merged per-session log with jsonl persistence, `relay.py` sender-side event relay, `diagnose.py` connection probes with plain-language causes.
+`static/`: `app.js` router, `store.js` the one EventSource, `send.js`, `receive.js`, `transfer.js` (reducer, incidents, shared by live view and replay), `panels.js` (tables, verification, trace, log, network), `chunks.js` (canvas map, chunk table), `graphs.js` (six SVG charts), `replay.js`, `history.js`, `settings.js`, `about.js`.
 Questions: Why is the peer API separate from the UI server? How does a reload replay a transfer? Why `os.rename` under a lock for the final name?
 
 ## experiments/

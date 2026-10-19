@@ -160,10 +160,11 @@ class ReceiverHandle:
             with sess.lock:
                 sess.nacks += 1
             log.warning("session %d chunk %d failed verification -> NACK", sess.id, idx)
-            ev.emit("hash_chunk_bad", role="receiver", session=sess.id, index=idx, path=path_id)
+            ev.emit("hash_chunk_bad", role="receiver", session=sess.id, index=idx, path=path_id,
+                    sha=sess.m["chunk_sha256"][idx][:12] if idx < sess.total else "")
             ev.message("receiver", sess.id, NACK, idx, 0, path_id, "out")
             return NACK
-        ev.emit("hash_chunk_ok", role="receiver", session=sess.id, index=idx, path=path_id)
+        ev.emit("hash_chunk_ok", role="receiver", session=sess.id, index=idx, path=path_id, sha=sess.m["chunk_sha256"][idx][:12])
         ev.message("receiver", sess.id, CHUNK, idx, len(data), path_id, "in")
         ev.message("receiver", sess.id, ACK, idx, 0, path_id, "out")
         with sess.lock:
