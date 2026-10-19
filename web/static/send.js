@@ -13,6 +13,7 @@ MP.views.send = function (root) {
 
   const kind = (v, label, on) => MP.h("label", {}, MP.h("input", { type: "radio", name: "kind", value: v, checked: on }), " " + label);
   const target = MP.h("input", { type: "text", id: "target", autocomplete: "off", spellcheck: "false", class: "mono" });
+  const pcode = MP.h("input", { type: "text", id: "pcode", autocomplete: "off", spellcheck: "false", maxlength: 12, class: "mono", style: "max-width:12em" });
   const paths = MP.h("input", { type: "number", id: "paths", min: 1, max: 8, value: 4 });
   const chunk = MP.h("select", { id: "chunk" }, [["64 KiB", 65536], ["256 KiB", 262144], ["1 MiB", 1048576], ["4 MiB", 4194304]]
     .map(([t, v]) => MP.h("option", { value: v, selected: v === 1048576 }, t)));
@@ -24,12 +25,22 @@ MP.views.send = function (root) {
   const msg = MP.h("p", { role: "alert", class: "err" });
   const prog = MP.h("progress", { max: 100, value: 0, hidden: true });
   const btn = MP.h("button", { type: "submit", class: "primary" }, "Send");
+  const result = MP.h("div"), test = MP.h("button", { type: "button", id: "test-conn" }, "Test connection");
+  test.onclick = async () => {
+    result.replaceChildren(MP.h("p", { class: "muted" }, "Testing..."));
+    try {
+      const r = await MP.post("/api/test-connection", { kind: form.kind.value, value: target.value.trim(), addr_mode: addr.value, code: form.kind.value === "id" ? pcode.value.trim() || null : null });
+      result.replaceChildren(r.error ? MP.h("p", { class: "err" }, r.error) : MP.table(["Address", "Result", "ms", "Detail"], r.results.map((x) =>
+        [x.host + ":" + r.port, x.ok ? "reachable" : "unreachable", x.ok ? x.ms : "-", x.ok ? "peer " + x.name : x.reason]), [2]));
+    } catch (e) { result.replaceChildren(MP.h("p", { class: "err" }, e.message)); }
+  };
   const hint = () => (target.placeholder = form.kind.value === "id" ? "ABCD-EFGH-JKLM-..." : "6-character code");
 
   const form = MP.h("form", {}, drop,
     MP.h("label", {}, "Send to"),
     MP.h("div", { class: "opts" }, kind("id", "Receiver ID", true), kind("code", "Code", false)),
-    MP.h("div", { style: "margin-top:8px" }, target),
+    MP.h("div", { class: "row", style: "margin-top:8px" }, target, test), result,
+    MP.h("label", { for: "pcode" }, "Pairing code (optional, skips the Accept click)"), pcode,
     MP.h("details", {}, MP.h("summary", {}, "Advanced"),
       MP.h("label", { for: "paths" }, "Paths (1 to 8)"), paths,
       MP.h("label", { for: "chunk" }, "Chunk size"), chunk,
@@ -47,7 +58,7 @@ MP.views.send = function (root) {
     try {
       const up = await MP.upload(file, (p) => (prog.value = p));
       const r = await MP.post("/api/send", { upload_id: up.upload_id, kind: form.kind.value, value: target.value.trim(),
-        paths: +paths.value, chunk_size: +chunk.value, profile: profile.value, addr_mode: addr.value });
+        paths: +paths.value, chunk_size: +chunk.value, profile: profile.value, addr_mode: addr.value, code: form.kind.value === "id" ? pcode.value.trim() || null : null });
       location.hash = "#/transfer/" + r.session;
     } catch (err) { msg.textContent = err.message; }
     busy = false; btn.disabled = false; prog.hidden = true;

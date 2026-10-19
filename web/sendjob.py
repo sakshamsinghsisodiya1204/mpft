@@ -26,10 +26,10 @@ def file_sha256(path):
 
 
 class SendJob:
-    def __init__(self, node, path, kind, value, paths=4, chunk_size=1 << 20, profile="none", cleanup_dir=None, addr_mode="auto"):
+    def __init__(self, node, path, kind, value, paths=4, chunk_size=1 << 20, profile="none", cleanup_dir=None, addr_mode="auto", code=None):
         self.node, self.path, self.kind, self.value = node, path, kind, value
         self.paths, self.chunk_size, self.profile, self.cleanup_dir = paths, chunk_size, profile, cleanup_dir
-        self.addr_mode, self.peer_hosts, self.relay = addr_mode, [], None
+        self.addr_mode, self.peer_hosts, self.relay, self.code = addr_mode, [], None, code or None
         self.sid = random.getrandbits(32)
         self.state, self.message, self.emulator, self.result = "starting", "", None, None
         self.peer, self.peer_name, self.targets = None, None, []
@@ -54,7 +54,7 @@ class SendJob:
     def resolve(self):
         """Return (receiver_id, code or None)."""
         if self.kind == "id":
-            return self.value, None
+            return self.value, self.code  # optional pairing code travels with the ID
         if not self.node.rendezvous:
             raise RuntimeError("No rendezvous URL is set. Add one in Settings, or send by Receiver ID.")
         r = httpx.get(f"{self.node.rendezvous}/resolve/{self.value.strip().upper()}", timeout=5)
@@ -113,6 +113,9 @@ class SendJob:
             self.set_state("transferring", f"{self.paths} path(s)")
             res = run_transfer(self.path, targets, self.chunk_size, session_id=self.sid)
             ok, err = res["success"], res.get("error")
+            if not ok:
+                err = (err + ". " if err else "The receiver or the network went away. ") + \
+                    "Send the same file again once the receiver is back: chunks it already holds are kept and the transfer resumes."
         except httpx.HTTPError as e:
             err = f"Could not reach the receiver ({type(e).__name__}). Check the ID, that the receiver app is running and the network."
         except (RuntimeError, ValueError) as e:

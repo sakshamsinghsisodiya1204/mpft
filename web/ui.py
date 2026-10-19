@@ -15,14 +15,16 @@ from pydantic import BaseModel, Field
 
 from mpft.emulator import BLOCK
 
+from .diagnose import probe
 from .feed import Feed
+from .ids import decode_hosts, filter_hosts, is_tailscale
 from .netprofiles import PROFILES
 from .node import safe_name
 from .sendjob import SendJob
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-HISTORY_FIELDS = ["time", "direction", "name", "size", "sha256", "peer", "session", "result", "seconds",
-                  "goodput_mbit", "retransmits"]
+HISTORY_FIELDS = ["time", "direction", "name", "size", "sha256", "peer", "session", "paths", "result", "seconds",
+                  "goodput_mbit", "retransmits", "incidents"]
 
 
 class SendReq(BaseModel):
@@ -32,6 +34,7 @@ class SendReq(BaseModel):
     paths: int = Field(default=4, ge=1, le=8)
     chunk_size: int = Field(default=1 << 20, ge=4096, le=16 << 20)
     profile: str = "none"
+    code: str | None = Field(default=None, max_length=20)
     addr_mode: str = Field(default="auto", pattern="^(auto|tailscale|lan)$")
 
 
@@ -59,6 +62,28 @@ def make_ui_app(node, ui_port=8000):
         return {"name": node.name, "id": node.id, "code": node.code, "code_expires": node.codes.expires_at(node.code),
                 "hosts": node.hosts, "rendezvous": node.rendezvous, "rv_status": node.rv_status, "host": node.host,
                 "peer_port": node.peer_port, "max_size": node.max_size, "profiles": PROFILES}
+
+    @app.post("/api/test-connection")
+    def test_connection(body: dict):
+        """body: {kind: id|code, value, addr_mode}. Probes every address of the receiver."""
+        kind, value = body.get("kind", "id"), str(body.get("value", ""))
+        try:
+            if kind == "code":
+                if not node.rendezvous:
+                    raise ValueError("A code needs a rendezvous URL (Settings). Use the Receiver ID instead.")
+                import httpx
+                r = httpx.get(f"{node.rendezvous}/resolve/{value.strip().upper()}", timeout=5)
+                if r.status_code != 200:
+                    raise ValueError(r.json().get("detail", "Code not found or expired."))
+                value = r.json()["id"]
+            hosts, port = decode_hosts(value)
+        except ValueError as e:
+            return {"ok": False, "error": str(e), "results": []}
+        hosts = filter_hosts(hosts, body.get("addr_mode", "auto"))
+        if not hosts:
+            return {"ok": False, "error": "This ID has no address of the chosen type.", "results": []}
+        results = [probe(h, port) for h in hosts]
+        return {"ok": any(r["ok"] for r in results), "port": port, "results": results}
 
     @app.post("/api/code/new")
     def code_new():
@@ -96,7 +121,7 @@ def make_ui_app(node, ui_port=8000):
             raise HTTPException(404, "Upload not found. Choose the file again.")
         if r.profile not in PROFILES:
             raise HTTPException(400, "Unknown network profile.")
-        job = SendJob(node, up["path"], r.kind, r.value, r.paths, r.chunk_size, r.profile, up["dir"], r.addr_mode).start()
+        job = SendJob(node, up["path"], r.kind, r.value, r.paths, r.chunk_size, r.profile, up["dir"], r.addr_mode, r.code).start()
         return {"session": job.sid}
 
     @app.get("/api/session/{sid}")
@@ -115,12 +140,15 @@ def make_ui_app(node, ui_port=8000):
                 "capture_ports": [port] if port else [], "loopback": offer["client"] in ("127.0.0.1", "::1")}
 
     @app.get("/api/session/{sid}/events")
-    def session_events(sid: int):
-        """Merged two-sided log from disk, for replaying a past transfer."""
+    def session_events(sid: int, download: int = 0):
+        """Merged two-sided log from disk, for replaying a past transfer. ?download=1 saves it as JSON."""
         mine = "sender" if sid in node.jobs else "receiver"
         if sid not in node.seen and not os.path.exists(node.log._path(sid)):
             raise HTTPException(404, "Unknown session.")
-        return [{**e, "mine": e["side"] == mine} for e in node.log.events(sid)]
+        evs = [{**e, "mine": e["side"] == mine} for e in node.log.events(sid)]
+        if download:
+            return JSONResponse(evs, headers={"Content-Disposition": f'attachment; filename="mpft-session-{sid}.json"'})
+        return evs
 
     def emulator_of(sid):
         job = node.jobs.get(sid)
@@ -188,6 +216,15 @@ def make_ui_app(node, ui_port=8000):
     def received():
         return node.received
 
+    @app.delete("/api/received/{name}")
+    def delete_received(name: str):
+        path = node.download_path(name)
+        real = os.path.realpath(path) if path else None
+        if not real or not real.startswith(node.out_dir + os.sep):
+            raise HTTPException(404, "File not found.")
+        node.forget_received(name)
+        return {"ok": True}
+
     @app.get("/download/{name}")
     def download(name: str):
         path = node.download_path(name)
@@ -196,16 +233,37 @@ def make_ui_app(node, ui_port=8000):
             raise HTTPException(404, "File not found.")
         return FileResponse(real, filename=name)
 
+    def enriched():
+        """History rows plus paths/incidents counted from the session log (the receiver's row is written before the sender's last events arrive)."""
+        out = []
+        for h in node.history:
+            row = dict(h)
+            sid = h.get("session")
+            if sid is not None and (sid in node.seen or os.path.exists(node.log._path(sid))):
+                evs = node.log.events(sid)
+                row["paths"] = len({e["path"] for e in evs if e["kind"] == "path_up" and e["side"] == "sender"}) or None
+                row["incidents"] = sum(1 for e in evs if e["side"] == "sender" and e["kind"] in ("path_down", "nack"))
+            out.append(row)
+        return out
+
     @app.get("/api/history")
     def history():
-        return node.history
+        return enriched()
+
+    @app.get("/api/diagnostics")
+    def diagnostics():
+        """Addresses of this Mac, a reachability self-test of our own peer port, and where files go."""
+        results = [probe(h, node.peer_port, timeout=3) for h in node.hosts]
+        return {"name": node.name, "hosts": [{"ip": h, "kind": "tailscale" if is_tailscale(h) else "lan"} for h in node.hosts],
+                "peer_port": node.peer_port, "data_port": node.data_port, "max_size": node.max_size, "out_dir": node.out_dir,
+                "state_dir": os.path.abspath(node.state_dir), "self_test": results, "rendezvous": node.rendezvous}
 
     @app.get("/api/history.csv")
     def history_csv():
         out = io.StringIO()
         w = csv.DictWriter(out, fieldnames=HISTORY_FIELDS, extrasaction="ignore")
         w.writeheader()
-        w.writerows(node.history)
+        w.writerows(enriched())
         return Response(out.getvalue(), media_type="text/csv",
                         headers={"Content-Disposition": 'attachment; filename="mpft-history.csv"'})
 

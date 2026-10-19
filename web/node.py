@@ -42,10 +42,14 @@ class Node:
         self.code = None
         self.lock = threading.Lock()
         self.offers, self.sessions, self.jobs = {}, {}, {}  # offer_id / session id -> state
-        self.received, self.seen = [], set()  # seen: every session id this node took part in
+        self.seen = set()  # seen: every session id this node took part in
         self.log = SessionLog(os.path.join(self.state_dir, "sessions"))
         self.tokens, self.offsets, self.listeners = {}, {}, []  # sid -> session token / peer clock offset
         self.history = self._load_history()
+        self.received = [{"name": h["name"], "size": h["size"], "sha256": h["sha256"], "time": h["time"],
+                          "sender": h.get("peer", ""), "session": h.get("session"), "verified": True}
+                         for h in self.history if h.get("direction") == "receive" and h.get("result") == "ok"
+                         and os.path.isfile(os.path.join(self.out_dir, h["name"]))]
         ev.subscribe(self._on_event)
         self.new_code()
 
@@ -133,14 +137,23 @@ class Node:
         ev.emit("offer_" + state, node=self.name, role="receiver", session=offer["session_id"])
 
     def _accept(self, offer):
-        stage = os.path.join(self.out_dir, ".incoming", offer["id"])
+        # Stage by file hash, not by session: a failed transfer keeps its .part, and sending again resumes from it
+        stage = os.path.join(self.out_dir, ".incoming", offer["sha256"][:16])
+        for sid, x in list(self.sessions.items()):  # a dead earlier attempt (no connections left) is replaced
+            if x["stage"] == stage and (x["handle"].stopping.is_set() or not x["handle"].conns):
+                self._cleanup(sid, False)
+        with self.lock:
+            if any(x["stage"] == stage for x in self.sessions.values()):
+                offer["reply"] = {"status": "declined", "reason": "This file is already being received."}
+                self._resolve(offer, "declined")
+                return offer["reply"]
         handle = self._listen(stage)
         token = secrets.token_urlsafe(16)
         with self.lock:
             self.tokens[offer["session_id"]] = token
             self.seen.add(offer["session_id"])
             self.sessions[offer["session_id"]] = {"offer": offer, "handle": handle, "stage": stage}
-        t = threading.Timer(3600, self._cleanup, (offer["session_id"],))
+        t = threading.Timer(3600, self._cleanup, (offer["session_id"], False))
         t.daemon = True
         t.start()
         offer["reply"] = {"status": "accepted", "port": handle.port, "token": token,
@@ -211,7 +224,7 @@ class Node:
             return
         if e["success"]:
             self._store_file(self.sessions[e["session"]])
-        threading.Thread(target=self._cleanup, args=(e["session"],), daemon=True).start()
+        threading.Thread(target=self._cleanup, args=(e["session"], e["success"]), daemon=True).start()
 
     def _store_file(self, sess):
         offer, stage = sess["offer"], sess["stage"]
@@ -226,17 +239,29 @@ class Node:
                 dest = f"{base} ({n}){ext}"
             os.rename(os.path.join(stage, files[0]), os.path.join(self.out_dir, dest))
         entry = {"name": dest, "size": offer["size"], "sha256": offer["sha256"], "time": time.time(),
-                 "sender": offer["sender"], "session": offer["session_id"]}
+                 "sender": offer["sender"], "session": offer["session_id"], "verified": True}  # receiver checked the whole-file SHA-256
         self.received.append(entry)
         self.add_history({**entry, "direction": "receive", "peer": offer["sender"], "result": "ok"})
         ev.emit("file_received", node=self.name, file=entry)
 
-    def _cleanup(self, sid):
+    def _cleanup(self, sid, success=True):
+        """Stop the listener. The staging dir (with its .part for resume) is removed only after a verified transfer."""
         with self.lock:
             sess = self.sessions.pop(sid, None)
         if sess:
             sess["handle"].stop()
-            shutil.rmtree(sess["stage"], ignore_errors=True)
+            if success:
+                shutil.rmtree(sess["stage"], ignore_errors=True)
+
+    def forget_received(self, name):
+        """Delete a received file we stored (name is looked up in our list, never used as a path)."""
+        path = self.download_path(name)
+        if path:
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+            self.received = [r for r in self.received if r["name"] != name]
 
     def download_path(self, name):
         """Absolute path of a received file, or None. Only names we stored are served: no traversal."""

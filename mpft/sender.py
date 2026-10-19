@@ -134,7 +134,7 @@ class Sender:
             send_msg(sock, CHUNK, self.sid, idx, data)
             mtype, _, ridx, _ = recv_msg(sock)
         except (OSError, ProtocolError) as e:  # timeout, reset or garbage: treat the path as failed
-            self.fail_reason = "timeout" if isinstance(e, TimeoutError) else type(e).__name__
+            self.fail_reason = "timeout" if isinstance(e, TimeoutError) else "protocol error" if isinstance(e, ProtocolError) else "connection lost"
             if isinstance(e, TimeoutError):
                 ev.emit("timeout", role="sender", session=self.sid, index=idx, path=pid, after_s=self.timeout)
             return False
