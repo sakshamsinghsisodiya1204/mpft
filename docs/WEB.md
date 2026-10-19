@@ -153,3 +153,16 @@ Display filters: `mpft.type == 4` (chunks), `mpft.type == 2` (manifest), `mpft.t
 ## Honest security notes
 
 No built-in encryption or authentication: chunks, events and offers are plain TCP and HTTP. Tailscale (WireGuard) encrypts between the Macs. Protections in the app: the UI server listens on 127.0.0.1 only and checks Host/Origin; the peer server exposes only four endpoints; `/events` needs a per-session token; codes are single-use, expire after 10 minutes and are rate-limited; names are sanitised, files never overwritten, 2 GB default limit; the receiver must press Accept unless a valid code was given.
+
+## Receiving and downloading files
+- A verified file (whole-file SHA-256 checked, renamed from `.incoming`) is recorded in `<downloads>/.mpft-received.json` (`web/received.py`), so the list survives a restart. Names never overwrite: a second `payload.bin` is stored as `payload (1).bin`.
+- A transfer that fails (sender gives up, hash mismatch) is also recorded, with `status: failed` and a message, and has no file and no Download button.
+- API: `GET /api/files` (list), `GET /api/files/<id>/download` (attachment, HTTP Range supported, 404 for unknown ids, failed entries or a name that resolves outside the downloads dir), `DELETE /api/files/<id>`. Clients never send a path, only the id we generated.
+- Receive page: table (name, size, SHA-256, received at, verified) with Download and Delete per row; it refreshes on the `file_received` event. The Transfer page of a finished session shows the same Download button in the header strip on the receiver's side.
+
+## Graphs
+Six SVG graphs (throughput per path and total, chunks done, in-flight per path, RTT per path with min-max band, cumulative retransmissions, byte share) in `web/static/graphs.js`. Each SVG is drawn at its real pixel width and redrawn by a `ResizeObserver` (so a graph built in a hidden container is never 0 px wide), redraws are throttled to about 4 per second, and an empty graph says "Waiting for data". Dashed vertical markers: `path N down`, `requeued N`, `recovered`. Graphs are rebuilt from the stored events, so they render the same live, mid-transfer and after a reload.
+
+## Visual design and tests
+Tokens (colours, spacing, fonts, path palette) live in `web/static/tokens.css` (light default, dark via `prefers-color-scheme` and the Theme toggle), layout in `layout.css`, components in `components.css`. Text contrast is checked by `tests/test_design_contrast.py` (4.5:1 text, 3:1 chart colours, both themes).
+Browser tests: `.venv/bin/pytest tests/e2e` starts two real instances (ports 8000/8001/9000 and 8010/8011/9010), sends a 30 MB file with the path-failure condition through alice's page, and asserts on console errors, SSE events, graphs, downloads (SHA-256 of the downloaded bytes), the failed-transfer case, theme, keyboard focus and phone-width layout. `MPFT_SHOTS=1` also writes the screenshots.
