@@ -16,6 +16,7 @@ from .status import StatusWriter
 
 log = logging.getLogger("mpft.sender")
 MAX_RETRIES = 5
+MAX_PATH_FAILS = 6
 
 
 def build_manifest(file_path, chunk_size):
@@ -84,9 +85,13 @@ class Sender:
 
     # ---- per-path worker ----
     def worker(self, pid):
-        sock = None
+        sock, fails = None, 0  # fails: consecutive failures on this path
         while not self.stop.is_set():
             if sock is None:
+                if fails >= MAX_PATH_FAILS:
+                    break
+                if fails:  # exponential backoff before reconnecting a flaky path
+                    self.stop.wait(min(0.1 * 2 ** fails, 2.0))
                 sock = self.connect(pid)
                 if sock is None:
                     break
@@ -100,7 +105,10 @@ class Sender:
                 idx = self.q.get(timeout=0.1)
             except queue.Empty:
                 continue
-            if not self.send_chunk(sock, pid, idx):
+            if self.send_chunk(sock, pid, idx):
+                fails = 0
+            else:
+                fails += 1
                 self.fail_path(pid, idx)
                 sock.close()
                 sock = None
