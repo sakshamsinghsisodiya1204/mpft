@@ -67,7 +67,7 @@ class SendJob:
         ok = []
         for h in hosts:
             try:
-                self.peer_name = httpx.get(f"http://{h}:{port}/health", timeout=3).json().get("name")
+                self.peer_name = httpx.get(f"http://{h}:{port}/health", timeout=5).json().get("name")
                 ok.append(h)
             except (httpx.HTTPError, ValueError):
                 continue
