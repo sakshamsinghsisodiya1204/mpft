@@ -85,3 +85,8 @@ immediate; a silent black hole would add up to the chunk timeout (5 s default).
 - The emulator does not drop IP packets, so TCP-level loss behaviour is not tested.
 - Wireshark captures and a real two-Mac run are not part of these results (see `wireshark/CAPTURE.md` and
   `docs/REMOTE.md`); they must be done by hand.
+
+## Update: scenarios, role-specific views, graph axis
+
+`tests/e2e/test_scenarios.py` (3 tests): sender and receiver pages differ (title, banner, panel order, Download only on the receiver); a 2 MB transfer gets a millisecond axis with at least 5 throughput points; the slow-WAN scenario succeeds; the total-failure scenario shows "Not delivered" on the sender, "Nothing was saved" on the receiver and no file on disk.
+Result: 25 e2e tests and 50 unit tests pass.

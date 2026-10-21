@@ -28,21 +28,14 @@ const STATE_KIND = { done: "ok", failed: "bad", transferring: "info", receiving:
 MP.panels.strip = () => {
   const cell = (label, cls) => { const b = H("b", { class: cls === "m" ? "m" : "" }, "-"); return [H("div", { class: "cell" + (cls === "grow" ? " grow" : "") }, H("small", {}, label), b), b]; };
   const [cf, vf] = cell("File", "grow"), [cs, vs] = cell("Size", "m"), [cst] = cell("State"), [ce, ve] = cell("Elapsed", "m"), [ct, vt] = cell("ETA", "m"), [cg, vg] = cell("Goodput", "m");
-  const act = H("div", { class: "cell", id: "file-action" }); let shown = "";
-  const strip = H("div", { class: "strip" }, cf, cs, cst, ce, ct, cg, act);
+  const strip = H("div", { class: "strip" }, cf, cs, cst, ce, ct, cg);
   return { el: H("section", { class: "panel strip-panel", "aria-label": "Transfer summary" }, strip), update(s, m) {
     vf.textContent = s.name || "waiting for the first event"; vs.textContent = s.size != null ? MP.bytes(s.size) : "-";
     const kind = STATE_KIND[s.phase] || (/ing$/.test(s.phase) ? "warn" : ""), label = s.phase + (s.message && !s.ended ? ": " + s.message : "");
     if (cst.dataset.k !== label + kind) { cst.dataset.k = label + kind; cst.querySelector("b").replaceChildren(MP.badge(kind, label)); MP.topState(s.phase, kind); }
-    const el = elapsed(s), avg = el > 1 ? (s.bytes * 8) / 1e6 / el : 0;
+    const el = elapsed(s), avg = el > 0 ? (s.bytes * 8) / 1e6 / el : 0;
     ve.textContent = MP.secs(el); vg.textContent = (s.ended ? avg : Object.keys(s.paths).reduce((a, id) => a + lastRate(s, id), 0)).toFixed(1) + " Mbit/s";
     vt.textContent = s.ended || avg <= 0 ? "-" : MP.secs(((s.size - s.bytes) * 8) / 1e6 / avg);
-    const fl = m.file, key = m.role + (fl ? fl.id + fl.status : "") + s.ended; // rebuild only on change, or hover and clicks are lost
-    if (shown === key) return; shown = key;
-    if (m.role !== "receiver") act.replaceChildren();
-    else if (fl && fl.status === "ok") act.replaceChildren(H("small", {}, "Received file"), H("a", { class: "btn primary", id: "session-download", href: "/api/files/" + fl.id + "/download", download: fl.name }, "Download"));
-    else if (fl) act.replaceChildren(H("small", {}, "Not saved"), H("span", { class: "err", id: "session-failed" }, fl.error || "Transfer failed. Nothing was saved."));
-    else act.replaceChildren();
   } };
 };
 
@@ -53,7 +46,7 @@ MP.panels.progress = () => {
   return { el: panel("Progress", bar, st), update(s) {
     const pct = s.total ? (100 * s.done) / s.total : 0;
     bar.firstChild.style.width = pct + "%"; bar.setAttribute("aria-valuenow", Math.round(pct));
-    const now = Object.keys(s.paths).reduce((a, id) => a + lastRate(s, id), 0), el = elapsed(s), avg = el > 1 ? (s.bytes * 8) / 1e6 / el : 0;
+    const now = Object.keys(s.paths).reduce((a, id) => a + lastRate(s, id), 0), el = elapsed(s), avg = el > 0 ? (s.bytes * 8) / 1e6 / el : 0;
     v.Chunks.textContent = s.done + "/" + s.total; v.Bytes.textContent = MP.bytes(s.bytes);
     v["Goodput now"].textContent = s.ended ? "-" : now.toFixed(1) + " Mbit/s"; v["Goodput mean"].textContent = avg.toFixed(1) + " Mbit/s";
     v.Elapsed.textContent = MP.secs(el);

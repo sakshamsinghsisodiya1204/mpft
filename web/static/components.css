@@ -84,3 +84,12 @@ td { white-space: nowrap; } td.hash, .kv td, .timeline td { white-space: normal;
 p.err:empty, .field-err:empty { display: none; } td .row { flex-wrap: nowrap; } .empty-state { padding: var(--s4); }
 .panel > .row { margin-bottom: var(--s3); } .panel > .flush { margin-top: 0; }
 .panel > h2 + .table-wrap { margin-top: 0; }
+/* role-aware hero */
+.hero { border-left: 4px solid var(--accent); }
+.hero.receiver { border-left-color: var(--p4); }
+.hero.ok { background: var(--ok-soft); } .hero.bad { background: var(--err-soft); border-left-color: var(--err); }
+.hero-body { display: flex; flex-wrap: wrap; gap: var(--s4); justify-content: space-between; align-items: center; }
+.hero-title { margin: 0; font-size: 18px; font-weight: 600; } .hero-body p.muted { margin: var(--s1) 0 0; }
+.facts { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s6); margin-bottom: var(--s4); }
+.facts dt { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); } .facts dd { margin: 0; font-family: var(--mono); font-weight: 600; }
+.hero > .hero-body, .hero > .facts { margin-top: var(--s3); }

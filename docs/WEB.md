@@ -27,7 +27,7 @@ ordinary `mpft.receiver`, so Wireshark still sees plain MPFT.
 | UI server | `web/ui.py`, `web/feed.py` | Pages, JSON API, SSE stream, downloads. Bound to 127.0.0.1 |
 | Send job | `web/sendjob.py` | Resolve target, offer, then `run_transfer` |
 | Rendezvous | `web/rendezvous.py` | Code to Receiver ID lookup |
-| Profiles | `web/netprofiles.py` | Emulator paths for None, Asymmetric, Lossy, Path failure |
+| Profiles | `web/netprofiles.py` | Emulator paths for eight scenarios (see Scenarios below) |
 
 **Receiver ID.** `base32("host:peer_port")` shown in groups of four letters. It decodes locally, so no server is
 needed. The host is the Tailscale 100.x address if there is one, else the LAN IP, else 127.0.0.1 (`--host` overrides).
@@ -166,3 +166,35 @@ Six SVG graphs (throughput per path and total, chunks done, in-flight per path, 
 ## Visual design and tests
 Tokens (colours, spacing, fonts, path palette) live in `web/static/tokens.css` (light default, dark via `prefers-color-scheme` and the Theme toggle), layout in `layout.css`, components in `components.css`. Text contrast is checked by `tests/test_design_contrast.py` (4.5:1 text, 3:1 chart colours, both themes).
 Browser tests: `.venv/bin/pytest tests/e2e` starts two real instances (ports 8000/8001/9000 and 8010/8011/9010), sends a 30 MB file with the path-failure condition through alice's page, and asserts on console errors, SSE events, graphs, downloads (SHA-256 of the downloaded bytes), the failed-transfer case, theme, keyboard focus and phone-width layout. `MPFT_SHOTS=1` also writes the screenshots.
+
+## Sender view vs receiver view
+
+Both sides open the same session, but the page is role-aware (`web/static/hero.js`, order table in `transfer.js`):
+
+| | Sender | Receiver |
+|---|---|---|
+| Page title | "Sending name" | "Receiving name" |
+| Banner (left bar) | accent colour; "Delivered to bob" / "Not delivered" and a Send another file button | green bar; "Saved and verified" with a Download button / "Nothing was saved" and the reason |
+| Panel order | summary, progress, chunk map, graphs, paths, network controls, incidents | verification first, then summary, progress, chunk map, incidents, graphs |
+| Controls | Kill / Restore path, delay, corruption (the emulator runs on the sender) | none; it only observes and downloads |
+
+## Scenarios
+
+Chosen in the Send form (own Scenario panel, with a one-line description). Each runs through the emulator in front of the receiver.
+
+| Scenario | What happens | Result |
+|---|---|---|
+| Clean network | direct connections | success |
+| Clean but slow | 16 Mbit/s per path, 20 ms delay (long smooth curves) | success |
+| Asymmetric | slower, further paths | success |
+| Lossy | 5% of chunks corrupted, NACK + retransmit | success |
+| Heavy loss | 20% of chunks corrupted | success, many retransmissions |
+| Path failure | last path dies for good after 3 s | success on the remaining paths |
+| Path flaps | one path dies at 2 s, returns 3 s later (backoff, reconnect) | success |
+| Total failure | all paths die after 1 s (use a file over 2 MB) | fails; nothing saved, no download |
+
+## Graph time axis
+
+Throughput is computed in the browser from chunk completions, in buckets of `duration / 20` (1 s only for transfers over 20 s), so a 0.4 s transfer still draws a curve.
+Transfers under 2 s use a millisecond axis; longer ones use seconds. The x range is the real duration, not a fixed 5 s. Series start at 0.
+Screenshots: `docs/screenshots/scn-*.png`.

@@ -18,9 +18,11 @@ MP.views.send = function (root) {
   const paths = MP.h("input", { type: "number", id: "paths", min: 1, max: 8, value: 4 });
   const chunk = MP.h("select", { id: "chunk" }, [["64 KiB", 65536], ["256 KiB", 262144], ["1 MiB", 1048576], ["4 MiB", 4194304]]
     .map(([t, v]) => MP.h("option", { value: v, selected: v === 1048576 }, t)));
-  const profile = MP.h("select", { id: "profile" });
-  info.then((i) => i.profiles.forEach((p) => profile.append(MP.h("option", { value: p },
-    { none: "None", asymmetric: "Asymmetric", lossy: "Lossy", path_failure: "Path failure mid-transfer" }[p]))));
+  const profile = MP.h("select", { id: "profile" }), pdesc = MP.h("p", { class: "muted", id: "profile-desc" });
+  let scen = {};
+  info.then((i) => { scen = i.scenarios || {}; i.profiles.forEach((p) => profile.append(MP.h("option", { value: p }, scen[p] ? scen[p].label : p))); describe(); });
+  const describe = () => { const c = scen[profile.value]; pdesc.textContent = c ? c.text + (c.outcome === "failure" ? " Expected result: the transfer fails." : "") : ""; };
+  profile.addEventListener("change", describe);
   const addr = MP.h("select", { id: "addr" }, [["auto", "Automatic (all addresses in the ID)"], ["tailscale", "Tailscale only"], ["lan", "LAN only"]]
     .map(([v, t]) => MP.h("option", { value: v }, t)));
   const msg = MP.h("p", { role: "alert", class: "err", id: "send-error" });
@@ -47,7 +49,8 @@ MP.views.send = function (root) {
       field("Pairing code (optional, skips the Accept click)", "pcode", pcode),
       MP.h("details", {}, MP.h("summary", {}, "Advanced"),
         MP.h("div", { class: "form-grid" }, field("Paths (1 to 8)", "paths", paths), field("Chunk size", "chunk", chunk),
-          field("Receiver address", "addr", addr), field("Network conditions", "profile", profile)))),
+          field("Receiver address", "addr", addr)))),
+    MP.h("section", { class: "panel" }, MP.h("h2", {}, "Scenario"), field("Network conditions to emulate", "profile", profile), pdesc),
     MP.h("div", { class: "row" }, btn, prog, msg));
   form.addEventListener("change", hint);
   form.addEventListener("submit", async (e) => {

@@ -2,7 +2,7 @@
 MP.PATH_COLORS = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => "var(--p" + i + ")"); // CSS variables, so light and dark themes recolour them
 MP.PATH_DASH = ["", "6 3", "2 2", "8 3 2 3", "1 3", "10 4", "4 2 1 2", "12 3"];
 MP.newState = (sid) => ({ sid, role: null, phase: "starting", message: "", total: 0, done: 0, retx: 0, nacks: 0, bytes: 0,
-  hasSender: false, sawTicks: false, okRecv: 0, badRecv: 0, badIdx: [], paths: {}, series: {}, bucket: { sec: 0, bytes: {} }, log: [], trace: [],
+  hasSender: false, sawTicks: false, okRecv: 0, badRecv: 0, badIdx: [], paths: {}, series: {}, bucket: { sec: 0, bytes: {} }, log: [], trace: [], doneLog: [],
   lastNack: -1, ended: false, success: null, verify: { ok: 0, bad: 0, expected: null, computed: null, result: null }, dirty: new Set(),
   t0: null, tEnd: null, cum: [], retxSeries: [], inflight: {}, inflightSeries: {}, rttSeries: {}, incidents: [], marks: [], addrs: null });
 
@@ -31,7 +31,7 @@ MP.reduce = function (s, e) {
     s.cell[i] = 2; s.cpath[i] = pid; s.done++; s.bytes += nbytes; s.tAck[i] = e.t; mark(i);
     const p = MP.pathOf(s, pid); p.bytes += nbytes; p.chunks++;
     s.bucket.bytes[pid] = (s.bucket.bytes[pid] || 0) + nbytes;
-    MP.sample(s.cum, rel, s.done);
+    MP.sample(s.cum, rel, s.done); s.doneLog.push([rel, pid, nbytes]);
     for (const inc of s.incidents) if (inc.chunks.delete(i)) { inc.absorbed[pid] = (inc.absorbed[pid] || 0) + 1; closeIfDone(inc); }
   };
   switch (e.kind) {
@@ -49,7 +49,7 @@ MP.reduce = function (s, e) {
           cell: new Uint8Array(n), retxFlag: new Uint8Array(n), cpath: new Int16Array(n).fill(-1), attempts: new Uint8Array(n),
           tFirst: new Float64Array(n).fill(NaN), tAck: new Float64Array(n).fill(NaN), rtt: new Float32Array(n).fill(NaN),
           vOk: new Uint8Array(n), vBad: new Uint8Array(n), csha: new Array(n).fill(""), phase: e.role === "sender" ? "transferring" : "receiving" });
-        s.bucket.sec = Math.floor(e.t);
+        s.bucket.sec = Math.floor(e.t); s.cum.push([0, 0]); s.retxSeries.push([0, 0]);
       } else if (e.role === "sender") s.phase = "transferring";
       s.t0 = Math.min(s.t0, e.t);
       say("session started, " + e.total_chunks + " chunks"); break;
@@ -133,13 +133,20 @@ MP.explain = function (inc) {
 
 // Build all panels for a state object; draw(s) refreshes them. Shared by the live view and Replay.
 MP.buildTransfer = function (root, s, meta, extra = []) {
-  // [panel factory, grid columns of 12]
-  const layout = [[MP.panels.strip, 12], [MP.panels.progress, 12], [MP.panels.chunkmap, 12], [MP.panels.graphs, 12], [MP.panels.paths, 12], [MP.panels.incidents, 6], [MP.panels.verify, 6],
-    [MP.panels.chunktable, 12], [MP.panels.header, 6], [MP.panels.network, 6], [MP.panels.trace, 6], [MP.panels.logs, 6], [MP.panels.wireshark, 12]];
-  const P = layout.map(([f]) => f(s, meta));
-  P.forEach((p, i) => p.el.classList.add("s" + layout[i][1]));
+  // [name, panel factory, grid columns of 12]; the order differs by role: the sender watches delivery, the receiver watches verification.
+  const layout = [["hero", MP.panels.hero, 12], ["strip", MP.panels.strip, 12], ["progress", MP.panels.progress, 12], ["chunkmap", MP.panels.chunkmap, 12], ["graphs", MP.panels.graphs, 12],
+    ["paths", MP.panels.paths, 12], ["incidents", MP.panels.incidents, 6], ["verify", MP.panels.verify, 6], ["chunktable", MP.panels.chunktable, 12], ["header", MP.panels.header, 6],
+    ["network", MP.panels.network, 6], ["trace", MP.panels.trace, 6], ["logs", MP.panels.logs, 6], ["wireshark", MP.panels.wireshark, 12]];
+  const ORDER = {
+    sender: ["hero", "strip", "progress", "chunkmap", "graphs", "paths", "network", "incidents", "verify", "chunktable", "header", "trace", "logs", "wireshark"],
+    receiver: ["hero", "verify", "strip", "progress", "chunkmap", "incidents", "graphs", "paths", "chunktable", "header", "logs", "trace", "wireshark", "network"] };
+  const P = layout.map(([, f]) => f(s, meta));
+  P.forEach((p, i) => p.el.classList.add("s" + layout[i][2]));
   root.append(...extra, MP.h("div", { class: "grid12" }, ...P.map((p) => p.el)));
-  return { draw: (st) => { P.forEach((p) => p.update(st, meta)); st.dirty.clear(); } };
+  return { draw: (st) => {
+    const role = meta.role || st.role || "sender", ord = ORDER[role] || ORDER.sender;
+    root.dataset.role = role;
+    P.forEach((p, i) => { p.el.style.order = ord.indexOf(layout[i][0]); p.update(st, meta); }); st.dirty.clear(); } };
 };
 
 MP.views.transfer = function (root, sid) {
@@ -148,7 +155,11 @@ MP.views.transfer = function (root, sid) {
   root.append(MP.h("h1", {}, "Transfer " + sid));
   const ui = MP.buildTransfer(root, s, meta);
   let queued = false;
-  const draw = () => { queued = false; ui.draw(s); };
+  const draw = () => {
+    queued = false; ui.draw(s);
+    const role = meta.role || s.role, t = document.getElementById("page-title"); // the page title says which side you are on
+    if (role && t) { t.textContent = (role === "sender" ? "Sending" : "Receiving") + (s.name ? " " + s.name : " (session " + sid + ")"); document.title = t.textContent + " - MPFT"; }
+  };
   const schedule = () => { if (!queued) { queued = true; setTimeout(draw, 60); } };
   const loadMeta = () => MP.api("/api/session/" + sid).then((m) => { Object.assign(meta, m, { loaded: true }); schedule(); }).catch(() => {});
   const seen = new Set(); // the live feed and the persisted log overlap: apply each (side, sseq) once

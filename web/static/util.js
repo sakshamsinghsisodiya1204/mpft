@@ -21,6 +21,7 @@ MP.bytes = function (n) {
 };
 MP.secs = function (s) {
   if (s == null || !isFinite(s)) return "-";
+  if (s < 1) return Math.round(s * 1000) + " ms";
   s = Math.round(s);
   return s >= 60 ? Math.floor(s / 60) + "m " + (s % 60) + "s" : s + "s";
 };

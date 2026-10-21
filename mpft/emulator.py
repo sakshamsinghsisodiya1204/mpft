@@ -99,6 +99,10 @@ class PathProxy:
         ev.emit("emulator_path_killed", port=self.cfg["listen_port"])
         self.dead = True
         self.stop()
+        if self.cfg.get("restore_after_s"):  # a flapping path comes back by itself
+            t = threading.Timer(self.cfg["restore_after_s"], self.restore)
+            t.daemon = True
+            t.start()
 
     def stop(self):
         if self.timer:

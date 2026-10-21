@@ -29,6 +29,7 @@
   window.addEventListener("hashchange", route);
   MP.connect();
   MP.api("/api/info").then((i) => {
+    MP.scenarios = i.scenarios;
     document.getElementById("whoami").textContent = "MPFT / " + i.name;
     const short = document.getElementById("my-id-short"); short.textContent = i.id.length > 18 ? i.id.slice(0, 10) + "..." + i.id.slice(-6) : i.id; short.title = i.id;
   }).catch(() => {});

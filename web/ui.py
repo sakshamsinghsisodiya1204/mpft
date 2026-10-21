@@ -18,7 +18,7 @@ from mpft.emulator import BLOCK
 from .diagnose import probe
 from .feed import Feed
 from .ids import decode_hosts, filter_hosts, is_tailscale
-from .netprofiles import PROFILES
+from .netprofiles import PROFILES, SCENARIOS
 from .node import safe_name
 from .sendjob import SendJob
 
@@ -61,7 +61,8 @@ def make_ui_app(node, ui_port=8000):
     def info():
         return {"name": node.name, "id": node.id, "code": node.code, "code_expires": node.codes.expires_at(node.code),
                 "hosts": node.hosts, "rendezvous": node.rendezvous, "rv_status": node.rv_status, "host": node.host,
-                "peer_port": node.peer_port, "max_size": node.max_size, "profiles": PROFILES}
+                "peer_port": node.peer_port, "max_size": node.max_size, "profiles": PROFILES,
+                "scenarios": {k: {"label": v[0], "text": v[1], "outcome": v[2]} for k, v in SCENARIOS.items()}}
 
     @app.post("/api/test-connection")
     def test_connection(body: dict):

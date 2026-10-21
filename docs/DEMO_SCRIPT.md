@@ -76,3 +76,11 @@ Results (about 30 s): open `results/throughput_vs_paths.png` (goodput doubles wi
 - [ ] Web demo: ports 8000, 8001, 8010, 8011, 9100 free; latest `wireshark/mpft.lua` copied into Wireshark
 - [ ] Two-device demo: both Macs on Tailscale, `--data-port 9000` allowed through the macOS firewall, Settings > self-test green on both
 - [ ] Backup: screenshots of dashboard and Wireshark if the live demo fails
+
+## Scenario tour (about 5 minutes)
+
+1. Send a 30 MB file with **Clean but slow**: the sender page says "Sending" and "Delivered"; open Bob's page: "Receiving", verification first, Download button.
+2. Send with **Path flaps**: the incident timeline shows path down, backoff, reconnect, recovered.
+3. Send with **Heavy loss**: rejected chunks and retransmissions, file hash still matches.
+4. Send an 8 MB file with **Total failure**: sender "Not delivered", receiver "Nothing was saved", no Download.
+5. Send a 2 MB file on a clean network: note the graphs use milliseconds.

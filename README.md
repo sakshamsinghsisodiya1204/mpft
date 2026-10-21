@@ -123,3 +123,7 @@ Capture instructions and screenshot checklist: [wireshark/CAPTURE.md](wireshark/
 
 ## Team contributions
 See [docs/CONTRIBUTIONS.md](docs/CONTRIBUTIONS.md).
+
+### Scenarios and views (web UI)
+
+The Send form offers eight network scenarios (clean, slow, asymmetric, lossy, heavy loss, path failure, path flap, total failure). The sender and receiver see different Transfer pages, and graphs adapt their time axis (ms for sub-2 s transfers). See `docs/WEB.md`.

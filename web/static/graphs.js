@@ -8,6 +8,12 @@ MP.ticks = (max, n = 4, int = false) => {
   const raw = int ? Math.max(1, max / n) : max / n, mag = Math.pow(10, Math.floor(Math.log10(raw))), step = [1, 2, 5, 10].map((m) => m * mag).find((v) => v >= raw);
   const out = []; for (let v = 0; v < max + step - 1e-9; v += step) out.push(+v.toFixed(6)); return { step, out, end: out[out.length - 1] }; // last tick >= max, so no data is clipped
 };
+// Throughput from chunk completions in buckets sized to the transfer: a per-second tick gives one point for a 0.4 s transfer.
+MP.rateSeries = (s, tmax) => {
+  const dt = tmax >= 20 ? 1 : Math.max(0.02, tmax / 20), n = Math.max(1, Math.ceil(tmax / dt - 1e-9)), per = {};
+  for (const [t, pid, b] of s.doneLog) { const k = Math.min(n - 1, Math.floor(t / dt)); ((per[pid] ||= new Array(n).fill(0)))[k] += b; }
+  return Object.fromEntries(Object.entries(per).map(([pid, a]) => [pid, [[0, a[0] * 8 / 1e6 / dt], ...a.map((b, k) => [Math.min(tmax, (k + 1) * dt), b * 8 / 1e6 / dt])]]));
+};
 const fmt = (v) => (Math.abs(v) >= 100 || Number.isInteger(v) ? v.toFixed(0) : v.toFixed(1));
 
 // series: [{label, pts: [[t, v, lo, hi]], color, dash, step, path}]; marks: [{t, label}]
@@ -17,13 +23,14 @@ MP.chart = function (svg, series, marks, tmax, yUnit) {
   const live = series.filter((x) => x.pts.length), bad = (v) => !Number.isFinite(v);
   svg.dataset.state = live.length ? "ready" : "empty";
   if (!live.length) { svg.replaceChildren(sv("text", { x: W / 2, y: HT / 2, "text-anchor": "middle", class: "empty" }, "Waiting for data")); return; }
-  const ymax = Math.max(1e-6, ...live.flatMap((x) => x.pts.flatMap((p) => [p[1], p[3] ?? 0]).filter(Number.isFinite))), yt = MP.ticks(ymax * 1.02, 4, /chunks/.test(yUnit)), top = yt.end;
-  const xt = MP.ticks(tmax, Math.max(2, Math.floor((R - L) / 90)));
-  const X = (t) => L + ((R - L) * t) / (xt.end || tmax), Y = (v) => HT - B - ((HT - B - T) * v) / top;
+  const ymax0 = Math.max(0, ...live.flatMap((x) => x.pts.flatMap((p) => [p[1], p[3] ?? 0]).filter(Number.isFinite))), ymax = ymax0 < 1e-3 ? 1 : ymax0, yt = MP.ticks(ymax * 1.02, 4, /chunks/.test(yUnit)), top = yt.end;
+  // Short transfers (under 2 s) get a millisecond axis, otherwise the whole curve is squeezed against the left edge.
+  const ms = tmax < 2, u = ms ? 1000 : 1, xt = MP.ticks(tmax * u, Math.max(2, Math.floor((R - L) / 90)));
+  const X = (t) => L + ((R - L) * t * u) / (xt.end || tmax * u), Y = (v) => HT - B - ((HT - B - T) * v) / top;
   yt.out.forEach((v) => k.push(sv("line", { x1: L, x2: R, y1: Y(v), y2: Y(v), class: "grid" }), sv("text", { x: L - 6, y: Y(v) + 3, "text-anchor": "end", class: "tick" }, fmt(v))));
   xt.out.forEach((v) => k.push(sv("line", { x1: X(v), x2: X(v), y1: HT - B, y2: HT - B + 4, class: "axis" }), sv("text", { x: X(v), y: HT - B + 15, "text-anchor": "middle", class: "tick" }, fmt(v))));
   k.push(sv("line", { x1: L, x2: R, y1: HT - B, y2: HT - B, class: "axis" }), sv("line", { x1: L, x2: L, y1: T, y2: HT - B, class: "axis" }),
-    sv("text", { x: (L + R) / 2, y: HT - 4, "text-anchor": "middle", class: "axlabel" }, "time since start (s)"), sv("text", { x: L, y: 10, class: "axlabel" }, yUnit));
+    sv("text", { x: (L + R) / 2, y: HT - 4, "text-anchor": "middle", class: "axlabel" }, ms ? "time since start (ms)" : "time since start (s)"), sv("text", { x: L, y: 10, class: "axlabel" }, yUnit));
   const used = [];
   marks.forEach((m) => {
     if (bad(m.t)) return;
@@ -71,9 +78,10 @@ MP.panels.graphs = () => {
   };
   const draw = () => {
     const s = last; lastDraw = Date.now(); timer = null; if (!s) return;
-    const ser = s.series, total = {}; for (const id in ser) for (const [t, v] of ser[id]) total[Math.round(t)] = (total[Math.round(t)] || 0) + v;
+    const tmax = Math.max(0.05, (s.tEnd || Date.now() / 1000) - (s.t0 || Date.now() / 1000), ...[s.rttSeries, s.inflightSeries, s.series].flatMap((m) => Object.values(m).map((a) => (a.length ? a[a.length - 1][0] : 0))));
+    const ser = tmax < 20 && s.doneLog.length ? MP.rateSeries(s, tmax) : s.series, total = {};
+    for (const id in ser) for (const [t, v] of ser[id]) total[t.toFixed(4)] = (total[t.toFixed(4)] || 0) + v;
     const tot = Object.entries(total).sort((a, b) => a[0] - b[0]).map(([t, v]) => [+t, v]);
-    const tmax = Math.max(5, (s.tEnd || Date.now() / 1000) - (s.t0 || Date.now() / 1000), ...[ser, s.rttSeries, s.inflightSeries].flatMap((m) => Object.values(m).map((a) => (a.length ? a[a.length - 1][0] : 0))));
     const m = s.marks, step = (x) => ({ ...x, step: true });
     MP.chart(svgs.throughput, [...pathSeries(ser), { label: "total", pts: tot, color: "var(--text)", dash: "" }], m, tmax, "Mbit/s");
     MP.chart(svgs.chunks, [{ label: "done", pts: s.cum, color: "var(--accent)", dash: "" }].map(step), m, tmax, "chunks done");
