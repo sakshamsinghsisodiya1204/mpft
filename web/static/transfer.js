@@ -9,7 +9,7 @@ MP.newState = (sid) => ({ sid, role: null, phase: "starting", message: "", total
 MP.pathOf = (s, id) => (s.paths[id] ||= { id, state: "up", local: "", remote: "", bytes: 0, chunks: 0, n: 0, mean: 0, m2: 0, retries: 0, nacks: 0, last: "" });
 MP.chunkLen = (s, i) => Math.min(s.cs, s.size - i * s.cs);
 // Keep at most one sample per minDt seconds (the last value wins), so graphs stay small on long transfers.
-MP.sample = (arr, t, v, minDt = 0.25) => { const l = arr[arr.length - 1]; if (l && t - l[0] < minDt) l[1] = v; else arr.push([t, v]); };
+MP.sample = (arr, t, v, minDt = 0.005) => { const l = arr[arr.length - 1]; if (l && t - l[0] < minDt) l[1] = v; else arr.push([t, v]); };
 
 MP.reduce = function (s, e) {
   if (s.role === "receiver") MP.bucketReceiver(s, e.t); // close finished seconds before counting this event
@@ -23,7 +23,7 @@ MP.reduce = function (s, e) {
   const mark = (i) => s.dirty.add(i);
   const pnote = (id, text) => { const p = MP.pathOf(s, id); p.last = text + " @" + rel.toFixed(1) + "s"; };
   const flag = (label) => s.marks.push({ t: rel, label });
-  const setInflight = (pid, d) => { s.inflight[pid] = Math.max(0, (s.inflight[pid] || 0) + d); MP.sample((s.inflightSeries[pid] ||= []), rel, s.inflight[pid], 0.2); };
+  const setInflight = (pid, d) => { s.inflight[pid] = Math.max(0, (s.inflight[pid] || 0) + d); MP.sample((s.inflightSeries[pid] ||= []), rel, s.inflight[pid], 0.005); };
   const openInc = (pid) => s.incidents.find((x) => x.kind === "path" && x.path === pid && !x.recoveredAt);
   const closeIfDone = (inc) => { if (!inc.chunks.size && !inc.recoveredAt && (inc.kind === "chunk" || inc.requeued > 0 || inc.restoredAt)) { inc.recoveredAt = e.t; flag("recovered"); } };
   const chunkDone = (i, pid, nbytes) => {

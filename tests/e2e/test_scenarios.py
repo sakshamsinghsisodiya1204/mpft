@@ -41,6 +41,8 @@ def test_short_transfer_uses_millisecond_axis_with_real_curve(world):
     a = world.pages["alice"]
     a.wait_for_selector("#graph-throughput[data-state=ready]")
     a.wait_for_timeout(600)
+    xs = a.evaluate("[...document.querySelectorAll('#graph-throughput text.tick')].map(t => +t.getAttribute('x'))")
+    assert max(xs) < 400, xs  # tick labels stay inside the plot
     shot(a, "scn-short-transfer")
     assert "(ms)" in a.text_content("#graph-throughput"), sid
     assert int(a.evaluate("document.querySelector('#graph-throughput polyline.series').dataset.n")) >= 5

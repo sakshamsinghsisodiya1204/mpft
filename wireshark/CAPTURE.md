@@ -52,3 +52,6 @@ sudo tcpdump -i lo0 -w mpft.pcap 'tcp port 9000 or tcp portrange 9201-9203'
 ## 5. Notes
 - Checksum offload on loopback can show "bad checksum" warnings. Ignore, or disable *Validate the TCP checksum*.
 - Large frames (up to 16 KiB on lo0) are normal: loopback MTU is 16384.
+
+## 6. Text evidence
+`docs/WIRESHARK_EVIDENCE.md` holds tshark extracts from a real capture (handshakes, decoded MANIFEST/CHUNK, bytes per path, path kill). GUI screenshots still need to be taken by hand.

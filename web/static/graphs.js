@@ -28,7 +28,7 @@ MP.chart = function (svg, series, marks, tmax, yUnit) {
   const ms = tmax < 2, u = ms ? 1000 : 1, xt = MP.ticks(tmax * u, Math.max(2, Math.floor((R - L) / 90)));
   const X = (t) => L + ((R - L) * t * u) / (xt.end || tmax * u), Y = (v) => HT - B - ((HT - B - T) * v) / top;
   yt.out.forEach((v) => k.push(sv("line", { x1: L, x2: R, y1: Y(v), y2: Y(v), class: "grid" }), sv("text", { x: L - 6, y: Y(v) + 3, "text-anchor": "end", class: "tick" }, fmt(v))));
-  xt.out.forEach((v) => k.push(sv("line", { x1: X(v), x2: X(v), y1: HT - B, y2: HT - B + 4, class: "axis" }), sv("text", { x: X(v), y: HT - B + 15, "text-anchor": "middle", class: "tick" }, fmt(v))));
+  xt.out.forEach((v) => k.push(sv("line", { x1: X(v / u), x2: X(v / u), y1: HT - B, y2: HT - B + 4, class: "axis" }), sv("text", { x: X(v / u), y: HT - B + 15, "text-anchor": "middle", class: "tick" }, fmt(v))));
   k.push(sv("line", { x1: L, x2: R, y1: HT - B, y2: HT - B, class: "axis" }), sv("line", { x1: L, x2: L, y1: T, y2: HT - B, class: "axis" }),
     sv("text", { x: (L + R) / 2, y: HT - 4, "text-anchor": "middle", class: "axlabel" }, ms ? "time since start (ms)" : "time since start (s)"), sv("text", { x: L, y: 10, class: "axlabel" }, yUnit));
   const used = [];
