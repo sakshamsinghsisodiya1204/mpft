@@ -222,7 +222,7 @@ that avoids re-hashing.
 | Parth | Emulator, experiments and graphs (Part 6) | `emulator.py` `_reader`/`_writer`, how each experiment is set up and why the numbers look that way |
 | Anupria | Wireshark, dashboard and web layer, test report (Part 7, section below) | `mpft.lua`, the screenshots in `TEST_REPORT.md` section 6, `web/` event hub and UI |
 
-This split is a suggestion (see `CONTRIBUTIONS.md`); change it to match who really did what.
+The split matches `CONTRIBUTIONS.md`.
 Everyone: know Part 1, the Part 2 diagram, the numbers in Part 6, and the limitations list.
 
 ## 12. Last-minute checklist
