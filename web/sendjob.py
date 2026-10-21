@@ -11,7 +11,7 @@ import httpx
 from mpft import events as ev
 from mpft.sender import run_transfer
 
-from .ids import decode_hosts, filter_hosts
+from .ids import decode_hosts
 from .netprofiles import start_profile
 from .node import safe_name
 from .relay import Relay
@@ -26,10 +26,10 @@ def file_sha256(path):
 
 
 class SendJob:
-    def __init__(self, node, path, kind, value, paths=4, chunk_size=1 << 20, profile="none", cleanup_dir=None, addr_mode="auto", code=None):
+    def __init__(self, node, path, kind, value, paths=4, chunk_size=1 << 20, profile="none", cleanup_dir=None, code=None):
         self.node, self.path, self.kind, self.value = node, path, kind, value
         self.paths, self.chunk_size, self.profile, self.cleanup_dir = paths, chunk_size, profile, cleanup_dir
-        self.addr_mode, self.peer_hosts, self.relay, self.code = addr_mode, [], None, code or None
+        self.peer_hosts, self.relay, self.code = [], None, code or None
         self.sid = random.getrandbits(32)
         self.state, self.message, self.emulator, self.result = "starting", "", None, None
         self.peer, self.peer_name, self.targets = None, None, []
@@ -86,9 +86,6 @@ class SendJob:
             self.set_state("resolving", "Looking up receiver")
             rid, code = self.resolve()
             hosts, port = decode_hosts(rid)
-            hosts = filter_hosts(hosts, self.addr_mode)
-            if not hosts:
-                raise RuntimeError(f"This receiver ID has no {self.addr_mode} address. Choose Automatic in Advanced.")
             hosts = self.reachable(hosts, port)
             host = hosts[0]
             self.peer = ",".join(hosts) + f":{port}"

@@ -17,7 +17,7 @@ from mpft.emulator import BLOCK
 
 from .diagnose import probe
 from .feed import Feed
-from .ids import decode_hosts, filter_hosts, is_tailscale
+from .ids import decode_hosts
 from .netprofiles import PROFILES, SCENARIOS
 from .node import safe_name
 from .sendjob import SendJob
@@ -35,7 +35,6 @@ class SendReq(BaseModel):
     chunk_size: int = Field(default=1 << 20, ge=4096, le=16 << 20)
     profile: str = "none"
     code: str | None = Field(default=None, max_length=20)
-    addr_mode: str = Field(default="auto", pattern="^(auto|tailscale|lan)$")
 
 
 def make_ui_app(node, ui_port=8000):
@@ -66,7 +65,7 @@ def make_ui_app(node, ui_port=8000):
 
     @app.post("/api/test-connection")
     def test_connection(body: dict):
-        """body: {kind: id|code, value, addr_mode}. Probes every address of the receiver."""
+        """body: {kind: id|code, value}. Probes every address of the receiver."""
         kind, value = body.get("kind", "id"), str(body.get("value", ""))
         try:
             if kind == "code":
@@ -80,9 +79,6 @@ def make_ui_app(node, ui_port=8000):
             hosts, port = decode_hosts(value)
         except ValueError as e:
             return {"ok": False, "error": str(e), "results": []}
-        hosts = filter_hosts(hosts, body.get("addr_mode", "auto"))
-        if not hosts:
-            return {"ok": False, "error": "This ID has no address of the chosen type.", "results": []}
         results = [probe(h, port) for h in hosts]
         return {"ok": any(r["ok"] for r in results), "port": port, "results": results}
 
@@ -122,7 +118,7 @@ def make_ui_app(node, ui_port=8000):
             raise HTTPException(404, "Upload not found. Choose the file again.")
         if r.profile not in PROFILES:
             raise HTTPException(400, "Unknown network profile.")
-        job = SendJob(node, up["path"], r.kind, r.value, r.paths, r.chunk_size, r.profile, up["dir"], r.addr_mode, r.code).start()
+        job = SendJob(node, up["path"], r.kind, r.value, r.paths, r.chunk_size, r.profile, up["dir"], r.code).start()
         return {"session": job.sid}
 
     @app.get("/api/session/{sid}")
@@ -252,7 +248,7 @@ def make_ui_app(node, ui_port=8000):
     def diagnostics():
         """Addresses of this Mac, a reachability self-test of our own peer port, and where files go."""
         results = [probe(h, node.peer_port, timeout=3) for h in node.hosts]
-        return {"name": node.name, "hosts": [{"ip": h, "kind": "tailscale" if is_tailscale(h) else "lan"} for h in node.hosts],
+        return {"name": node.name, "hosts": [{"ip": h, "kind": "lan"} for h in node.hosts],
                 "peer_port": node.peer_port, "data_port": node.data_port, "max_size": node.max_size, "out_dir": node.out_dir,
                 "state_dir": os.path.abspath(node.state_dir), "self_test": results, "rendezvous": node.rendezvous}
 

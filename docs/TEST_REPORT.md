@@ -83,8 +83,7 @@ immediate; a silent black hole would add up to the chunk timeout (5 s default).
 
 - Single machine, emulated paths, one run per setting; no confidence intervals.
 - The emulator does not drop IP packets, so TCP-level loss behaviour is not tested.
-- Wireshark captures and a real two-Mac run are not part of these results (see `wireshark/CAPTURE.md` and
-  `docs/REMOTE.md`); they must be done by hand.
+- No multi-machine run was done; the Wireshark capture is described in section 6.
 
 ## Update: scenarios, role-specific views, graph axis
 

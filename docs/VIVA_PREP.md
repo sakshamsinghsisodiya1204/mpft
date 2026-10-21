@@ -67,7 +67,7 @@ It does not drop IP packets (TCP would hide that anyway) and corruption is injec
 Every CHUNK is hashed on arrival and compared to the manifest before `pwrite`; a mismatch gives NACK and nothing is stored. The whole-file hash is a second barrier. Tested with `corrupt_rate` 1 %, 5 %, 10 % and by flipping a bit directly.
 
 **23. What security does MPFT have?**
-None by default: no encryption or authentication. The manifest file name is reduced to its base name to prevent path traversal, and header length is capped at 64 MiB. Use Tailscale or a VPN for confidentiality.
+None by default: no encryption or authentication. The manifest file name is reduced to its base name to prevent path traversal, and header length is capped at 64 MiB. It must only be used on a trusted network.
 
 **24. How does the dashboard get its data?**
 Sender and receiver write `status/<role>-<session>.json` atomically (temp file plus `os.replace`) every second. FastAPI's `/api/status` reads the files and marks those not updated for 5 s as stale; the JS page polls every second.
@@ -81,7 +81,7 @@ A sliding window per path (several chunks in flight), TLS or a keyed MAC, adapti
 The UI server can start transfers, read local files' uploads and kill emulator paths, so it listens on 127.0.0.1 and checks Host and Origin. The peer server must be reachable by other machines, so it is a separate app on 0.0.0.0 that exposes only `GET /health` and `POST /offer`.
 
 **27. How does a Receiver ID work without a server?**
-It is base32 of `host:peer_port`, so the sender decodes it locally. The host is the Tailscale 100.x address if present. A code needs the rendezvous service because six random characters cannot encode an address.
+It is base32 of `host:peer_port`, so the sender decodes it locally. The host is the machine's LAN address, or 127.0.0.1 when there is none. A code needs the rendezvous service because six random characters cannot encode an address.
 
 **28. What makes a code safe to use?**
 It is generated with `secrets`, has no confusable letters, expires in 10 minutes, is deleted on first use, and failed attempts are limited to five per minute per client. It does not provide encryption.
@@ -111,7 +111,7 @@ During the offer round trip the sender takes t0 and t3, the receiver reports its
 It is returned only in the accept reply and required on `/events`, so a stranger who finds the peer port cannot inject events into someone's dashboard. It is compared in constant time and events are forced to the side the token holder may speak for.
 
 **37. How does one Receiver ID work over two networks?**
-It encodes all of the receiver's addresses (Tailscale and LAN). The sender probes each, uses the reachable ones, and assigns paths round-robin, so a transfer can use both networks at once. Advanced lets you force one.
+It can encode several receiver addresses. The sender probes each, uses the reachable ones, and assigns paths round-robin over them. In this build each machine reports one LAN address.
 
 **38. What happens if the receiver disappears mid-transfer?**
 Paths fail, chunks are requeued up to the retry limit, the job fails with a message to send again. The receiver keeps the `.part` file in a staging folder named by the file hash, and the next offer of the same file resumes from the chunks whose hashes match.
@@ -129,5 +129,5 @@ It is a canvas, not DOM elements; above 6000 chunks several chunks share one cel
 Both sides write every tagged event to `sessions/<id>.jsonl`. Replay loads that file and feeds events to the same reducer used live, up to a virtual clock; scrubbing backwards resets and re-reduces. There is no separate replay code path to drift from the live view.
 
 **43. What would you do for real security?**
-Encrypt and authenticate the data plane (TLS or Noise) and the peer API, bind the session token to a key exchange, and replace code lookup by a verified rendezvous. Today Tailscale supplies encryption and device authentication.
+Encrypt and authenticate the data plane (TLS or Noise) and the peer API, bind the session token to a key exchange, and replace code lookup by a verified rendezvous. Today there is none, so it is meant for a trusted network.
 

@@ -1,5 +1,5 @@
 """Rendezvous service: receivers register code -> Receiver ID, senders resolve it.
-Run: python -m mpft rendezvous --port 9100. No auth and no encryption: use it on a trusted network (Tailscale)."""
+Run: python -m mpft rendezvous --port 9100. No auth and no encryption: use it on a trusted network."""
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 

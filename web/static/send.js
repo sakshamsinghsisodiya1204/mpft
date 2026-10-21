@@ -23,8 +23,6 @@ MP.views.send = function (root) {
   info.then((i) => { scen = i.scenarios || {}; i.profiles.forEach((p) => profile.append(MP.h("option", { value: p }, scen[p] ? scen[p].label : p))); describe(); });
   const describe = () => { const c = scen[profile.value]; pdesc.textContent = c ? c.text + (c.outcome === "failure" ? " Expected result: the transfer fails." : "") : ""; };
   profile.addEventListener("change", describe);
-  const addr = MP.h("select", { id: "addr" }, [["auto", "Automatic (all addresses in the ID)"], ["tailscale", "Tailscale only"], ["lan", "LAN only"]]
-    .map(([v, t]) => MP.h("option", { value: v }, t)));
   const msg = MP.h("p", { role: "alert", class: "err", id: "send-error" });
   const prog = MP.h("progress", { max: 100, value: 0, hidden: true, style: "flex:1;max-width:240px", "aria-label": "Upload progress" });
   const btn = MP.h("button", { type: "submit", class: "primary" }, "Send file");
@@ -32,7 +30,7 @@ MP.views.send = function (root) {
   test.onclick = async () => {
     result.replaceChildren(MP.h("p", { class: "muted", "aria-live": "polite" }, "Testing..."));
     try {
-      const r = await MP.post("/api/test-connection", { kind: form.kind.value, value: target.value.trim(), addr_mode: addr.value, code: form.kind.value === "id" ? pcode.value.trim() || null : null });
+      const r = await MP.post("/api/test-connection", { kind: form.kind.value, value: target.value.trim(), code: form.kind.value === "id" ? pcode.value.trim() || null : null });
       result.replaceChildren(r.error ? MP.h("p", { class: "err" }, r.error) : MP.table(["Address", "Result", "ms", "Detail"], r.results.map((x) =>
         [x.host + ":" + r.port, MP.badge(x.ok ? "ok" : "bad", x.ok ? "reachable" : "unreachable"), x.ok ? x.ms : "-", x.ok ? "peer " + x.name : x.reason]), [2]));
     } catch (e) { result.replaceChildren(MP.h("p", { class: "err" }, e.message)); }
@@ -48,8 +46,7 @@ MP.views.send = function (root) {
       MP.h("div", { class: "row" }, MP.h("div", { style: "flex:1 1 260px" }, target), test), result,
       field("Pairing code (optional, skips the Accept click)", "pcode", pcode),
       MP.h("details", {}, MP.h("summary", {}, "Advanced"),
-        MP.h("div", { class: "form-grid" }, field("Paths (1 to 8)", "paths", paths), field("Chunk size", "chunk", chunk),
-          field("Receiver address", "addr", addr)))),
+        MP.h("div", { class: "form-grid" }, field("Paths (1 to 8)", "paths", paths), field("Chunk size", "chunk", chunk)))),
     MP.h("section", { class: "panel" }, MP.h("h2", {}, "Scenario"), field("Network conditions to emulate", "profile", profile), pdesc),
     MP.h("div", { class: "row" }, btn, prog, msg));
   form.addEventListener("change", hint);
@@ -63,7 +60,7 @@ MP.views.send = function (root) {
     try {
       const up = await MP.upload(file, (p) => (prog.value = p));
       const r = await MP.post("/api/send", { upload_id: up.upload_id, kind: form.kind.value, value: target.value.trim(),
-        paths: +paths.value, chunk_size: +chunk.value, profile: profile.value, addr_mode: addr.value, code: form.kind.value === "id" ? pcode.value.trim() || null : null });
+        paths: +paths.value, chunk_size: +chunk.value, profile: profile.value, code: form.kind.value === "id" ? pcode.value.trim() || null : null });
       location.hash = "#/transfer/" + r.session;
     } catch (err) { msg.textContent = err.message; }
     busy = false; btn.disabled = false; prog.hidden = true;

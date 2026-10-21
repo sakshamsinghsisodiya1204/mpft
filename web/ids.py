@@ -3,11 +3,10 @@ import base64
 import ipaddress
 import re
 import socket
-import subprocess
 
 
 def encode_id(hosts, port):
-    """hosts: one address or a list (Tailscale + LAN). Stored as "h1,h2:port"."""
+    """hosts: one address or a list (LAN addresses). Stored as "h1,h2:port"."""
     hosts = [hosts] if isinstance(hosts, str) else hosts
     raw = base64.b32encode(f"{','.join(hosts)}:{port}".encode()).decode().rstrip("=")
     return "-".join(raw[i:i + 4] for i in range(0, len(raw), 4))
@@ -34,21 +33,6 @@ def decode_hosts(text):
     return hosts, port
 
 
-def is_tailscale(ip):
-    return ipaddress.ip_address(ip) in ipaddress.ip_network("100.64.0.0/10")  # Tailscale CGNAT range
-
-
-def _tailscale_ip():
-    try:
-        out = subprocess.run(["ifconfig"], capture_output=True, text=True, timeout=3).stdout
-    except (OSError, subprocess.SubprocessError):
-        return None
-    for ip in re.findall(r"inet (\d+\.\d+\.\d+\.\d+)", out):
-        if is_tailscale(ip):
-            return ip
-    return None
-
-
 def _lan_ip():
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
@@ -59,19 +43,10 @@ def _lan_ip():
 
 
 def detect_hosts():
-    """Every usable address, Tailscale first then LAN; 127.0.0.1 only when there is neither."""
-    found = [ip for ip in (_tailscale_ip(), _lan_ip()) if ip and not ip.startswith("127.")]
+    """The LAN address of this machine; 127.0.0.1 when there is none."""
+    found = [ip for ip in (_lan_ip(),) if ip and not ip.startswith("127.")]
     return list(dict.fromkeys(found)) or ["127.0.0.1"]
 
 
 def detect_host():
     return detect_hosts()[0]
-
-
-def filter_hosts(hosts, mode):
-    """Advanced option: mode is auto, tailscale or lan."""
-    if mode == "tailscale":
-        return [h for h in hosts if is_tailscale(h)]
-    if mode == "lan":
-        return [h for h in hosts if not is_tailscale(h)]
-    return list(hosts)

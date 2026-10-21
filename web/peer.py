@@ -5,7 +5,6 @@ import secrets
 from fastapi import FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from .ids import is_tailscale
 from .sessionlog import clean_events
 
 
@@ -36,7 +35,7 @@ def make_peer_app(node):
     @app.get("/addresses")
     def addresses():
         return {"name": node.name, "peer_port": node.peer_port,
-                "hosts": [{"ip": h, "kind": "tailscale" if is_tailscale(h) else "lan"} for h in node.hosts]}
+                "hosts": [{"ip": h, "kind": "lan"} for h in node.hosts]}
 
     @app.post("/events/{session_id}")
     def events(session_id: int, b: EventBatch, x_session_token: str = Header(default="")):

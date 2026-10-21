@@ -36,3 +36,4 @@
 - Not verified headlessly: real two-Mac run, Safari/Firefox, drag-and-drop from Finder, real clipboard on other browsers.
 - scenarios done: 8 scenarios (wan, heavy_loss, path_flap, total_failure added; emulator restore_after_s), role-aware hero banner + panel order (sender vs receiver), graphs: throughput from chunk completions in duration/20 buckets, ms axis under 2 s, real x range. e2e/test_scenarios.py; 25 e2e + 50 unit tests pass. Docs and PDFs regenerated.
 - final: report docx/pdf (new section 3.5) and deck (Views and Scenarios slide) updated via scripts/update_report_docx.py, update_deck_pptx.py, fix_toc_pages.py; CLI 50 MB run hash-identical; 75 tests pass (one transient e2e failure seen once, passes on rerun).
+- Removed all Tailscale / two-Mac material (docs, README, UI code, tests, REMOTE.md); address modes dropped (LAN or 127.0.0.1 only). Wireshark screenshots embedded in TEST_REPORT section 6. Team names + PRNs in CONTRIBUTIONS.md.

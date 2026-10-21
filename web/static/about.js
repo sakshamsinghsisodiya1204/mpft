@@ -15,5 +15,5 @@ MP.views.about = function (root) {
     h("section", { class: "panel" }, h("h2", {}, "Emulator and Wireshark"),
     h("p", {}, "A network condition on the Send page puts small TCP proxies between sender and receiver. Each proxy is one path with its own delay, jitter, rate limit, corruption and failure time. The data still travels as real MPFT over real TCP, so a Wireshark capture with wireshark/mpft.lua shows the same messages the trace panel lists.")),
     h("section", { class: "panel" }, h("h2", {}, "Security"),
-    h("p", {}, "There is no built-in encryption. Across networks use Tailscale, which encrypts with WireGuard. The page controls this machine, so it only listens on 127.0.0.1.")));
+    h("p", {}, "There is no built-in encryption, so use it on a trusted network. The page controls this machine, so it only listens on 127.0.0.1.")));
 };

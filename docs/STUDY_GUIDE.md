@@ -144,7 +144,7 @@ transmit time + a round trip. More paths overlap these waits. A sliding window w
 
 - `python -m mpft web ...` starts per user: a **UI server (127.0.0.1 only**, Host/Origin checked) and a **peer
   server (0.0.0.0)** exposing only `/health`, `/addresses`, `/offer`, `/events/{sid}`.
-- **Receiver ID** = base32 of `host:port` (all addresses, e.g. Tailscale + LAN), so no server is needed. **Pairing
+- **Receiver ID** = base32 of `host:port` (the machine's LAN address), so no server is needed. **Pairing
   code** = 6 random chars via a rendezvous service; expires in 10 min, single-use, rate limited.
 - **Offer flow:** sender POSTs an offer; an ID offer waits for the receiver to click Accept (up to 120 s); a valid
   code auto-accepts. Accept returns a session token needed for `/events`.
@@ -178,10 +178,10 @@ transmit time + a round trip. More paths overlap these waits. A sliding window w
 16. *Manifest sent on a dead path?* Lock released on failure; another path sends it.
 
 **Honest limitations (say these before they ask)**
-- No encryption or authentication; use Tailscale/VPN. Only path-traversal protection (base name only).
+- No encryption or authentication; use only on a trusted network. Only path-traversal protection (base name only).
 - Stop-and-wait per path limits single-path throughput.
 - Emulator is on one machine, approximates real networks, does not drop IP packets (TCP hides loss anyway).
-- Real two-Mac / Tailscale + LAN multipath run was **not verified** here; Safari/Firefox untested.
+- No run across two physical machines was done; Safari/Firefox untested.
 - `test_emulator` corruption test was flaky (~1 in 8 runs) - timing-dependent, not a protocol bug.
 
 **Improvements:** sliding window per path, TLS/Noise, adaptive chunk size, true loss emulation, resume metadata
@@ -198,7 +198,7 @@ that avoids re-hashing.
 - *"Why is goodput less than sum of link rates?"* Per-chunk round trip, headers, final tail on the slowest path, hashing cost.
 - *"What is goodput vs throughput?"* Goodput = useful file bytes / total time (excludes headers and retransmits).
 - *"Corrupt rate 5% but 12 of 200 retransmits (6%)?"* Random variation; each experiment ran once.
-- *"How do you know the emulator is realistic?"* It is not claimed to be; it gives reproducible, controllable conditions. Real run uses Tailscale/hotspot (`REMOTE.md`).
+- *"How do you know the emulator is realistic?"* It is not claimed to be; it gives reproducible, controllable conditions.
 
 ---
 
@@ -214,15 +214,16 @@ that avoids re-hashing.
 
 ---
 
-## 11. How to split the study between two people
+## 11. How to split the study between three people
 
-| Person A | Person B |
-|---|---|
-| Protocol, sender, receiver, retries, resume (Parts 3, 5, 8 concepts + failures) | Emulator, experiments + graphs, web layer, Wireshark (Parts 6, 7) |
-| Be able to open `sender.py` `worker`/`requeue` and `receiver.py` `_store`/`finalize` and explain every line | Be able to explain `emulator.py` `_reader/_writer`, each experiment's setup and why the numbers look that way |
+| Member | Focus | Must be able to explain |
+|---|---|---|
+| Saksham | Protocol, sender, receiver, retries, resume (Parts 3, 5, 8) | `sender.py` `worker`/`requeue`, `receiver.py` `_store`/`finalize`, the header and message types |
+| Parth | Emulator, experiments and graphs (Part 6) | `emulator.py` `_reader`/`_writer`, how each experiment is set up and why the numbers look that way |
+| Anupria | Wireshark, dashboard and web layer, test report (Part 7, section below) | `mpft.lua`, the screenshots in `TEST_REPORT.md` section 6, `web/` event hub and UI |
 
-Both: know Part 1, Part 2 diagram, the numbers in Part 6, and the limitations list. Fill in `CONTRIBUTIONS.md`
-with real names before submission - it is still a template.
+This split is a suggestion (see `CONTRIBUTIONS.md`); change it to match who really did what.
+Everyone: know Part 1, the Part 2 diagram, the numbers in Part 6, and the limitations list.
 
 ## 12. Last-minute checklist
 
@@ -238,3 +239,16 @@ with real names before submission - it is still a template.
 - **Sender vs receiver page.** Same session, role-aware banner (`web/static/hero.js`): the sender reads "Delivered" or "Not delivered"; the receiver reads "Saved and verified" with Download, or "Nothing was saved". Panel order differs: receiver leads with verification.
 - **Eight scenarios** (`web/netprofiles.py`): none, wan, asymmetric, lossy, heavy_loss, path_failure, path_flap (emulator `restore_after_s`), total_failure. Viva line: "total failure shows that no partial file is ever offered, because the receiver renames only after the whole-file SHA-256 matches."
 - **Graph axis.** A 100 ms transfer cannot fill a seconds axis, so throughput is bucketed from chunk completions at duration/20 and sub-2 s transfers use milliseconds. Use the slow-WAN scenario to get readable curves.
+
+## Wireshark: what the screenshots show (`TEST_REPORT.md` section 6, `WIRESHARK_EVIDENCE.md`)
+
+Capture on `lo0` of a 60 MB transfer over 3 emulated paths, path 3 killed at about 6 s.
+
+- **Handshakes:** three SYN/SYN-ACK pairs to ports 9201-9203 (one per path) and three to 9000 (proxy to receiver). Later SYNs to 9203 are reconnect attempts after the kill, answered with RST (refused).
+- **Conversations:** one TCP conversation per path; byte counts differ (fast path carries most). Each chunk crosses two hops, so everything appears twice.
+- **Retransmissions:** `tcp.analysis.retransmission` is empty on loopback. MPFT's chunk retransmissions are not TCP retransmissions.
+- **I/O graph:** one line per destination port; the 9203 line drops to zero at 6 s.
+- **Decoded MANIFEST/CHUNK:** magic MP, version 1, type, session id, chunk index, payload length (262144 for a chunk), header CRC32, then JSON or raw bytes.
+- **Path failure:** FIN/ACK on 9203 at 6.0 s.
+
+Likely question: *"Why does the same chunk show up twice?"* Because the emulator proxy terminates each TCP connection and opens a new one to the receiver.

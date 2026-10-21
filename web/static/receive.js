@@ -3,7 +3,7 @@ MP.views.receive = function (root) {
   const codeBox = MP.h("span", { class: "code-big", id: "my-code" });
   const codeNote = MP.h("span", { class: "muted", id: "code-expiry" });
   const status = MP.h("p", {});
-  const rvInput = MP.h("input", { type: "url", id: "rv", placeholder: "http://100.x.y.z:9100" });
+  const rvInput = MP.h("input", { type: "url", id: "rv", placeholder: "http://192.168.1.10:9100" });
   const rvMsg = MP.h("p", { class: "muted" });
   const offers = MP.h("div"), files = MP.h("div", { class: "files-wrap" }), err = MP.h("p", { class: "err", role: "alert" });
   let info = null, timer = null;

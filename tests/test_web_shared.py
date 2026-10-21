@@ -7,15 +7,13 @@ import pytest
 
 from conftest import make_file
 from test_web_flow import auto_decide, free_port, make_node, wait
-from web.ids import decode_hosts, encode_id, filter_hosts
+from web.ids import decode_hosts, encode_id
 from web.sendjob import SendJob
 
 
 def test_multi_host_id_and_modes():
-    rid = encode_id(["100.64.1.2", "192.168.1.5"], 8001)
-    assert decode_hosts(rid) == (["100.64.1.2", "192.168.1.5"], 8001)
-    assert filter_hosts(["100.64.1.2", "192.168.1.5"], "tailscale") == ["100.64.1.2"]
-    assert filter_hosts(["100.64.1.2", "192.168.1.5"], "lan") == ["192.168.1.5"]
+    rid = encode_id(["192.168.1.9", "192.168.1.5"], 8001)
+    assert decode_hosts(rid) == (["192.168.1.9", "192.168.1.5"], 8001)
     with pytest.raises(ValueError):
         decode_hosts(encode_id("not-an-ip", 8001))
 

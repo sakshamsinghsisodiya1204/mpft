@@ -30,7 +30,7 @@ ordinary `mpft.receiver`, so Wireshark still sees plain MPFT.
 | Profiles | `web/netprofiles.py` | Emulator paths for eight scenarios (see Scenarios below) |
 
 **Receiver ID.** `base32("host:peer_port")` shown in groups of four letters. It decodes locally, so no server is
-needed. The host is the Tailscale 100.x address if there is one, else the LAN IP, else 127.0.0.1 (`--host` overrides).
+needed. The host is the LAN IP, else 127.0.0.1 (`--host` overrides).
 
 **One-time code.** Six characters without confusable letters, valid 10 minutes, single use. The receiver registers
 `code -> ID` with the rendezvous service; the sender resolves it. A valid code makes the receiver accept without a click.
@@ -68,18 +68,12 @@ python -m mpft web --name bob   --ui-port 8010 --peer-port 8011 --out ./bob-dl  
 Open `http://127.0.0.1:8010/#/receive` (bob) and `http://127.0.0.1:8000/#/send` (alice). Copy bob's ID or code into
 alice's Send page, choose a file and press Send. With an ID, press Accept on bob's page; with a code there is no click.
 
-## Run on two Macs over Tailscale
+## Rendezvous (optional, for codes)
 
-1. Install Tailscale on both Macs and sign in to the same tailnet; note each 100.x address (`tailscale ip -4`).
-2. On the Mac that will host lookups, start `python -m mpft rendezvous --port 9100`.
-   **The rendezvous URL is that Mac's 100.x address:** `http://100.x.y.z:9100`.
-3. On each Mac: `python -m mpft web --name NAME --ui-port 8000 --peer-port 8001 --out ./downloads --rendezvous http://100.x.y.z:9100`.
-   The ID then contains the Tailscale address automatically. The URL can also be set in Receive > Settings.
-4. Allow incoming connections if macOS asks (peer port 8001 and the transfer ports).
-5. Sender enters the receiver's ID (or code) in the browser at `http://127.0.0.1:8000`.
+Codes need a lookup service: `python -m mpft rendezvous --port 9100`, then start each instance with `--rendezvous http://127.0.0.1:9100` (or set the URL in Receive > Settings). Sending by Receiver ID needs no service.
 
-Security: MPFT has no built-in encryption and the rendezvous service has no authentication. Tailscale (WireGuard)
-encrypts traffic between the Macs; do not expose the peer port or the rendezvous port to the open internet.
+Security: MPFT has no built-in encryption and the rendezvous service has no authentication. Use it
+only on a trusted network; do not expose the peer port or the rendezvous port to the open internet.
 The UI server only listens on 127.0.0.1 and rejects foreign Host or Origin headers, because it controls the machine.
 
 ## Network conditions
@@ -116,12 +110,12 @@ Display filters: `mpft.type == 4` (chunks), `mpft.type == 2` (manifest), `mpft.t
 | "Code not found or expired" | Codes live 10 minutes and work once. Press New code on the receiver. |
 | "Too many wrong codes" | Five failures per minute per client are allowed; wait a minute. |
 | Port already in use | A previous instance is still running: `lsof -i :8001`. |
-| ID shows 127.0.0.1 across Macs | No Tailscale or LAN address found; start with `--host 100.x.y.z`. |
+| ID shows 127.0.0.1 | No LAN address found; start with `--host <your LAN IP>` if needed. |
 | Packets look like plain TCP in Wireshark | Old copy of `mpft.lua`; reload the new one. |
 
 ## Shared two-sided dashboard
 
-- **Receiver ID** carries every address of the receiver ("h1,h2:port", base32): Tailscale 100.x and LAN when both exist. The sender probes each with `GET /health`, spreads the paths round-robin over those that answer (real multipath over two networks), and Advanced > Receiver address can force Tailscale only or LAN only. Send > Test connection shows per address reachable/unreachable with the reason.
+- **Receiver ID** carries every address of the receiver ("h1,h2:port", base32). The sender probes each with `GET /health` and spreads the paths round-robin over those that answer. Send > Test connection shows per address reachable/unreachable with the reason.
 - **Peer API** is exactly `GET /health`, `GET /addresses`, `POST /offer`, `POST /events/{session_id}`. The accept reply carries a session token; `/events` needs it in `X-Session-Token`.
 - **Event forwarding**: the sender batches its events every 0.5 s to `/events/{id}`; the reply carries the receiver's new events, so both browsers show one merged log. Each event is tagged `side` and a per-side sequence `sseq`. Timestamps are shifted with an NTP-style offset measured on the offer round trip (the receiver's wait for Accept cancels out). Order: corrected time, then side, then `sseq`. `t` is epoch seconds (offset-corrected); the UI shows time since session start.
 - **Events**: `session_started`, `offer_sent/received/accepted/declined`, `manifest_sent/received`, `path_up/down/restored`, `backoff`, `timeout`, `chunk_state` (pending, inflight, done, retransmitted, failed; offset, size, path, attempt), `message` (HELLO, MANIFEST, NACK, ERROR, DONE always; CHUNK/ACK sampled), `nack`, `requeue` (count, reason), `hash_chunk_ok/bad`, `hash_file_verified/mismatch`, `throughput_tick`, `rtt_sample`, `session_done`. `status/<role>-<session>.json` is unchanged.
@@ -130,29 +124,27 @@ Display filters: `mpft.type == 4` (chunks), `mpft.type == 2` (manifest), `mpft.t
 - **Resume**: received data is staged by file hash. If the receiver or network goes away the sender fails with a clear message and the `.part` file is kept; sending the same file again resumes from the chunks already held.
 - **Transfer page**: session header, progress, canvas chunk map (hatched in flight, solid done, outlined retransmitted, crossed failed, path-colour tick), sortable chunk table, paths table, incidents table with a plain sentence per failure, six graphs on a shared time axis with incident markers, verification, network controls (Kill, Restore, set delay, set corruption), protocol trace, event log with side filter, Wireshark commands.
 
-## Two-Mac runbook (Tailscale)
+## Runbook (one machine, two instances)
 
-1. Both people install Tailscale and join the same tailnet (`tailscale ip -4` shows the 100.x address). Tailscale is what encrypts the traffic; MPFT does not.
-2. Both run `python -m mpft web --name NAME --ui-port 8000 --peer-port 8001 --data-port 9000 --out ./downloads` and open `http://127.0.0.1:8000`.
-3. Receiver: Receive page, press Copy ID and message it to the sender. Optionally also send the 6-character code (valid 10 minutes, once).
-4. Sender: Send page, pick a file, paste the ID (and code), Test connection, Send.
-5. Without a code, the receiver presses Accept. Both open the Transfer page and see the same dashboard.
-6. macOS asks "accept incoming connections" the first time: Allow. If it was denied: System Settings > Network > Firewall > Options and allow the project's `.venv` Python.
-7. No Tailscale, different WiFi: use a phone hotspot that both Macs join (client isolation on guest or campus WiFi blocks Mac-to-Mac traffic; hotspots usually allow it).
+1. Start two instances as in "Run" above (alice on 8000, bob on 8010).
+2. Receiver (bob): Receive page, press Copy ID. Optionally also use the 6-character code (valid 10 minutes, once).
+3. Sender (alice): Send page, pick a file, paste the ID (and code), Test connection, Send.
+4. Without a code, bob presses Accept. Both open the Transfer page and see the same dashboard.
+5. macOS may ask "accept incoming connections" the first time: Allow. If it was denied: System Settings > Network > Firewall > Options and allow the project's `.venv` Python.
 
 ## Troubleshooting (addition)
 
 | Symptom | Cause and fix |
 |---|---|
-| Test connection: "No answer (timeout)" | Other network, Mac asleep, firewall dropping packets, or WiFi client isolation. Use Tailscale or a hotspot. |
+| Test connection: "No answer (timeout)" | Other network, Mac asleep, firewall dropping packets, or WiFi client isolation. Try another network. |
 | "Connection refused" | Address reachable, app not listening: check the ID and that the receiver app runs on that peer port. |
-| "No route to host" | Different networks without Tailscale. |
+| "No route to host" | The machines are on different networks. |
 | Transfer failed, "send the same file again" | Receiver or network dropped; resend the same file and it resumes. |
 | Settings > self-test says unreachable for a LAN address | macOS firewall blocks Python; allow it. |
 
 ## Honest security notes
 
-No built-in encryption or authentication: chunks, events and offers are plain TCP and HTTP. Tailscale (WireGuard) encrypts between the Macs. Protections in the app: the UI server listens on 127.0.0.1 only and checks Host/Origin; the peer server exposes only four endpoints; `/events` needs a per-session token; codes are single-use, expire after 10 minutes and are rate-limited; names are sanitised, files never overwritten, 2 GB default limit; the receiver must press Accept unless a valid code was given.
+No built-in encryption or authentication: chunks, events and offers are plain TCP and HTTP. Protections in the app: the UI server listens on 127.0.0.1 only and checks Host/Origin; the peer server exposes only four endpoints; `/events` needs a per-session token; codes are single-use, expire after 10 minutes and are rate-limited; names are sanitised, files never overwritten, 2 GB default limit; the receiver must press Accept unless a valid code was given.
 
 ## Receiving and downloading files
 - A verified file (whole-file SHA-256 checked, renamed from `.incoming`) is recorded in `<downloads>/.mpft-received.json` (`web/received.py`), so the list survives a restart. Names never overwrite: a second `payload.bin` is stored as `payload (1).bin`.

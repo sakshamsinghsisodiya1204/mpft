@@ -62,10 +62,10 @@ Results (about 30 s): open `results/throughput_vs_paths.png` (goodput doubles wi
 6. Show Verification: expected and computed SHA-256 equal, "Hash verified". On bob's Receive page, Download the file and run `shasum -a 256`.
 7. Copy the tcpdump command from the Wireshark panel for the next run, then filter `mpft.type == 4`.
 
-## Two-device web demo (about 5 minutes, two Macs over Tailscale)
-1. Both Macs run `python -m mpft web --name NAME --ui-port 8000 --peer-port 8001 --data-port 9000 --out ./downloads`. Receiver shows Receive > Copy ID and sends it to the sender.
+## Web demo (about 5 minutes, one Mac, two instances)
+1. Start two instances (two terminals): `python -m mpft web --name alice --ui-port 8000 --peer-port 8001 --data-port 9000 --out ./alice-dl --host 127.0.0.1` and the same with `--name bob --ui-port 8010 --peer-port 8011 --data-port 9010 --out ./bob-dl`. Open `localhost:8000` (sender) and `localhost:8010` (receiver). Receiver: Receive > Copy ID.
 2. Sender: Send, pick a 200 MB file, paste the ID, Test connection (reachable), Advanced > Network conditions = Lossy path, Send. Receiver presses Accept.
-3. Both screens show the same Transfer page: chunk map, paths table, graphs. Point at the receiver's screen showing the sender's events.
+3. Both pages show the same Transfer page: chunk map, paths table, graphs. Point at the receiver's page showing the sender's events.
 4. Sender kills path 1 in the Network panel. Show the incident marker "path 1 down" on the graphs, the Incidents row ("returned to the queue; path 0 delivered them") and the recovery time; press Restore and watch the path come back.
 5. Set corruption to 5 %: Verification shows rejected chunk indexes. Finish: "Hash verified"; receiver Downloads and runs `shasum -a 256`.
 6. History > Replay the transfer at 16x. Then show the Wireshark panel command and filter `mpft.type == 4` on the capture.
@@ -74,7 +74,7 @@ Results (about 30 s): open `results/throughput_vs_paths.png` (goodput doubles wi
 - [ ] Time each section with a stopwatch; cut the corruption run first if over time
 - [ ] Ports 9000, 9201-9203, 8080 are free (`lsof -i :9201`)
 - [ ] Web demo: ports 8000, 8001, 8010, 8011, 9100 free; latest `wireshark/mpft.lua` copied into Wireshark
-- [ ] Two-device demo: both Macs on Tailscale, `--data-port 9000` allowed through the macOS firewall, Settings > self-test green on both
+- [ ] Web demo: both instances started, Settings > self-test green on both
 - [ ] Backup: screenshots of dashboard and Wireshark if the live demo fails
 
 ## Scenario tour (about 5 minutes)
