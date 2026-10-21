@@ -90,3 +90,35 @@ immediate; a silent black hole would add up to the chunk timeout (5 s default).
 
 `tests/e2e/test_scenarios.py` (3 tests): sender and receiver pages differ (title, banner, panel order, Download only on the receiver); a 2 MB transfer gets a millisecond axis with at least 5 throughput points; the slow-WAN scenario succeeds; the total-failure scenario shows "Not delivered" on the sender, "Nothing was saved" on the receiver and no file on disk.
 Result: 25 e2e tests and 50 unit tests pass.
+
+## 6. Wireshark captures
+
+Captured on `lo0` during a 60 MB transfer over three emulated paths; the third path was killed at about 6 s.
+Decoded with `wireshark/mpft.lua`. Text extracts of the same capture are in `WIRESHARK_EVIDENCE.md`.
+
+![TCP handshakes, one per path](screenshots/wireshark-1-handshakes.png)
+Three SYN / SYN-ACK pairs on ports 9201, 9202, 9203 (sender to emulator) and three on port 9000 (emulator to
+receiver). The later SYNs to 9203 are the sender's reconnect attempts after the path was killed.
+
+![TCP conversations](screenshots/wireshark-2-conversations.png)
+One conversation per path. The 9201 and 9202 paths carry much more data than 9203; the four later 9203 rows are
+refused reconnects (one SYN, no reply data).
+
+![No TCP retransmissions](screenshots/wireshark-3-no-retransmissions.png)
+`tcp.analysis.retransmission` matches nothing: loopback does not lose packets. Chunk retransmissions happen at the
+MPFT layer and are not TCP retransmissions.
+
+![Per-path bytes over time](screenshots/wireshark-4-io-graph-per-path.png)
+I/O graph in bytes per second, one line per destination port. The 9203 line falls to zero at 6 s while the other
+two continue.
+
+![Decoded MANIFEST](screenshots/wireshark-5-manifest.png)
+MANIFEST: magic MP, version 1, type 2, session id, payload length 15755 and the JSON (name, size, chunk size,
+total chunks, SHA-256).
+
+![Decoded CHUNK](screenshots/wireshark-6-chunk.png)
+CHUNK 6: type 4, session id, chunk index 6, payload length 262144, header CRC32 and the raw payload.
+
+![Path failure](screenshots/wireshark-8-path-failure.png)
+FIN/ACK exchange on port 9203 at 6.0 s when the emulator closes the path, followed by RST,ACK replies to the
+sender's reconnect attempts (connection refused).
